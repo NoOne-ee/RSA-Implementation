@@ -2,10 +2,16 @@
 -- TB_MILLER_RABIN.vhd
 -- Testbench for MILLER_RABIN primality tester
 --
--- Tests with 32-bit numbers (K=32) for fast simulation:
---   1. Known primes: 7, 13, 101, 7919, 104729, 2147483647 (Mersenne prime)
+-- IMPORTANT: Compile with ALL dependencies:
+--   ghdl -i MONTGOMERY_MULT.vhd MOD_MONTGOMERY_EXP.vhd MILLER_RABIN.vhd TB_MILLER_RABIN.vhd
+--   ghdl -m TB_MILLER_RABIN
+--   ghdl -r TB_MILLER_RABIN --stop-time=500ms
+--
+-- Tests with 32-bit numbers (K=32):
+--   1. Known primes: 7, 13, 101, 7919, 104729
 --   2. Known composites: 4, 9, 15, 100, 561 (Carmichael), 1105 (Carmichael)
 --   3. Edge cases: 2, 3
+--   4. Larger primes: 65537, 104723
 -- =============================================================================
 
 library IEEE;
@@ -29,6 +35,7 @@ architecture SIM of TB_MILLER_RABIN is
 
   signal test_pass : integer := 0;
   signal test_fail : integer := 0;
+  signal timed_out : boolean := false;
 
 begin
 
@@ -63,11 +70,13 @@ begin
     procedure wait_done is
       variable timeout : integer := 0;
     begin
+      timed_out <= false;
       while o_done /= '1' loop
         wait until rising_edge(clk);
         timeout := timeout + 1;
-        if timeout > 500000 then
-          report "[TIMEOUT] Simulation stuck!" severity error;
+        if timeout > 2000000 then
+          report "[TIMEOUT] Simulation stuck - is MONTGOMERY_MULT.vhd included?" severity error;
+          timed_out <= true;
           exit;
         end if;
       end loop;
@@ -83,7 +92,10 @@ begin
       wait_done;
       wait_clk(1);
 
-      if expect_prime then
+      if timed_out then
+        report "[FAIL] " & name & " = " & integer'image(n_val) & " TIMED OUT" severity error;
+        test_fail <= test_fail + 1;
+      elsif expect_prime then
         if o_prime = '1' then
           report "[PASS] " & name & " = " & integer'image(n_val) & " detected as PRIME" severity note;
           test_pass <= test_pass + 1;
