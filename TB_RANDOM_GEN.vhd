@@ -117,7 +117,7 @@ begin
     check(o_rng(0) = '1',       "TEST 1: LSB is 1 (odd number)");
     check(o_rng /= 0,           "TEST 1: Output is non-zero");
 
-    report "  Generated: 0x" & to_hstring(o_rng(511 downto 480)) & "..." severity note;
+    report "  TEST 1: Generated a valid random number" severity note;
 
     wait_clk(3);
 
@@ -139,7 +139,7 @@ begin
     check(o_rng(0) = '1',       "TEST 2: LSB is 1");
     check(o_rng /= result1,     "TEST 2: Different from first output");
 
-    report "  Generated: 0x" & to_hstring(o_rng(511 downto 480)) & "..." severity note;
+    report "  TEST 2: Generated a unique random number" severity note;
 
     wait_clk(3);
 
@@ -162,7 +162,7 @@ begin
     check(o_rng /= result1,     "TEST 3: Different from first");
     check(o_rng /= result2,     "TEST 3: Different from second");
 
-    report "  Generated: 0x" & to_hstring(o_rng(511 downto 480)) & "..." severity note;
+    report "  TEST 3: All three outputs are unique" severity note;
 
     wait_clk(3);
 
@@ -189,7 +189,7 @@ begin
     check(o_rng(0) = '1',       "TEST 4: LSB is 1 (new seed)");
     check(o_rng /= result1,     "TEST 4: Different from seed1 result1");
 
-    report "  Generated: 0x" & to_hstring(o_rng(511 downto 480)) & "..." severity note;
+    report "  TEST 4: New seed produces different output" severity note;
 
     wait_clk(5);
 
@@ -209,7 +209,7 @@ begin
 
     -- End simulation
     wait for 100 ns;
-    std.env.stop;
+    assert false report "Simulation finished" severity failure;
   end process;
 
 end SIM;
