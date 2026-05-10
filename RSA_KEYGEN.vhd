@@ -43,7 +43,7 @@ entity RSA_KEYGEN is
     -- Outputs
     o_done  : out std_logic;
     o_N     : out unsigned(2*PRIME_WIDTH-1 downto 0);  -- Public modulus
-    o_e     : out unsigned(PRIME_WIDTH-1 downto 0);    -- Public exponent
+    o_e     : out unsigned(2*PRIME_WIDTH-1 downto 0);  -- Public exponent
     o_d     : out unsigned(2*PRIME_WIDTH-1 downto 0);  -- Private exponent
     o_valid : out std_logic                            -- '1' if key generation succeeded
   );
@@ -53,8 +53,8 @@ architecture RTL of RSA_KEYGEN is
 
   constant KEY_WIDTH : positive := 2 * PRIME_WIDTH;
 
-  -- Fixed public exponent
-  constant E_VALUE : unsigned(PRIME_WIDTH-1 downto 0) := to_unsigned(65537, PRIME_WIDTH);
+  -- Fixed public exponent (needs at least 17 bits, stored in KEY_WIDTH)
+  constant E_VALUE : unsigned(KEY_WIDTH-1 downto 0) := to_unsigned(65537, KEY_WIDTH);
 
   -- =========================================================================
   -- Component declarations
@@ -315,8 +315,8 @@ begin
         -- Compute N = p*q and phi = (p-1)*(q-1)
         -- ================================================================
         when ST_COMPUTE_N =>
-          n_reg   <= resize(p_reg, KEY_WIDTH) * resize(q_reg, KEY_WIDTH);
-          phi_reg <= resize(p_reg - 1, KEY_WIDTH) * resize(q_reg - 1, KEY_WIDTH);
+          n_reg   <= resize(resize(p_reg, KEY_WIDTH) * resize(q_reg, KEY_WIDTH), KEY_WIDTH);
+          phi_reg <= resize(resize(p_reg - 1, KEY_WIDTH) * resize(q_reg - 1, KEY_WIDTH), KEY_WIDTH);
           state   <= ST_GCD_LAUNCH;
 
         -- ================================================================

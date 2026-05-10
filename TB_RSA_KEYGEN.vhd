@@ -38,7 +38,7 @@ architecture SIM of TB_RSA_KEYGEN is
   signal load    : std_logic := '0';
   signal o_done  : std_logic;
   signal o_N     : unsigned(KEY_WIDTH-1 downto 0);
-  signal o_e     : unsigned(PRIME_WIDTH-1 downto 0);
+  signal o_e     : unsigned(KEY_WIDTH-1 downto 0);
   signal o_d     : unsigned(KEY_WIDTH-1 downto 0);
   signal o_valid : std_logic;
 
@@ -152,7 +152,7 @@ begin
     check(o_N(0) = '1', "N is odd (product of odd primes)");
 
     -- Test 4: e = 65537
-    check(o_e = to_unsigned(65537, PRIME_WIDTH), "e = 65537");
+    check(o_e = to_unsigned(65537, KEY_WIDTH), "e = 65537");
 
     -- Test 5: d is non-zero
     check(o_d /= 0, "d is non-zero");
@@ -167,7 +167,7 @@ begin
     -- but we can verify that e*d mod N gives a value consistent with RSA
     -- (e*d = 1 + k*phi for some k, so e*d mod phi = 1)
     -- We'll just verify the key looks reasonable.
-    check(o_d /= resize(o_e, KEY_WIDTH), "d /= e (private key differs from public)");
+    check(o_d /= o_e, "d /= e (private key differs from public)");
 
     -- Report generated values
     report "  N = " & integer'image(to_integer(o_N)) severity note;
