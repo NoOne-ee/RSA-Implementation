@@ -169,10 +169,10 @@ begin
     -- We'll just verify the key looks reasonable.
     check(o_d /= o_e, "d /= e (private key differs from public)");
 
-    -- Report generated values
-    report "  N = " & integer'image(to_integer(o_N)) severity note;
+    -- Report generated values (use lower 31 bits to avoid integer overflow)
+    report "  N (lower 31b) = " & integer'image(to_integer(o_N(30 downto 0))) severity note;
     report "  e = " & integer'image(to_integer(o_e)) severity note;
-    report "  d = " & integer'image(to_integer(o_d)) severity note;
+    report "  d (lower 31b) = " & integer'image(to_integer(o_d(30 downto 0))) severity note;
 
     wait_clk(5);
 
@@ -193,9 +193,7 @@ begin
     check(o_N(0) = '1',  "Second N is odd");
     check(o_d /= 0,      "Second d is non-zero");
 
-    report "  N = " & integer'image(to_integer(o_N)) severity note;
-    report "  e = " & integer'image(to_integer(o_e)) severity note;
-    report "  d = " & integer'image(to_integer(o_d)) severity note;
+    report "  Second key pair generated successfully" severity note;
 
     wait_clk(5);
 
