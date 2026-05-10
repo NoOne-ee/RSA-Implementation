@@ -315,8 +315,9 @@ begin
         -- Compute N = p*q and phi = (p-1)*(q-1)
         -- ================================================================
         when ST_COMPUTE_N =>
-          n_reg   <= resize(resize(p_reg, KEY_WIDTH) * resize(q_reg, KEY_WIDTH), KEY_WIDTH);
-          phi_reg <= resize(resize(p_reg - 1, KEY_WIDTH) * resize(q_reg - 1, KEY_WIDTH), KEY_WIDTH);
+          -- p_reg and q_reg are PRIME_WIDTH bits, so p*q fits in 2*PRIME_WIDTH = KEY_WIDTH bits
+          n_reg   <= p_reg * q_reg;
+          phi_reg <= (p_reg - 1) * (q_reg - 1);
           state   <= ST_GCD_LAUNCH;
 
         -- ================================================================
