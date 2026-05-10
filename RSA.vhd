@@ -20,128 +20,79 @@ end entity;
 
 architecture RTL of RSA is
 
-  type state_t is (IDLE, START_EXP, WAIT_EXP, START_DEC, WAIT_DEC, DONE_STATE);
+  type state_t is (IDLE, REDUCE, START_EXP, WAIT_EXP, LATCH, DONE_STATE);
   signal state : state_t := IDLE;
 
-  type sl_array_t is array (natural range <>) of std_logic;
-
-  signal msg_rns        : mod_array_t(0 to NUM_MODULI-1);
-  signal exp_rns_out    : mod_array_t(0 to NUM_MODULI-1);
-  signal decoded_result : unsigned(INT_WIDTH-1 downto 0);
+  signal x_reduced : unsigned(INT_WIDTH-1 downto 0) := (others => '0');
+  signal n_reg     : unsigned(INT_WIDTH-1 downto 0) := (others => '0');
+  signal e_reg     : unsigned(MOD_WIDTH-1 downto 0) := (others => '0');
 
   signal exp_start : std_logic := '0';
-  signal exp_done  : sl_array_t(0 to NUM_MODULI-1);
-
-  signal dec_pre_start : std_logic := '0';
-  signal dec_pre_done  : std_logic;
-
-  signal all_exp_done : std_logic;
+  signal exp_done  : std_logic;
+  signal exp_z     : unsigned(INT_WIDTH-1 downto 0);
 
 begin
 
-  ENC_U : entity work.RNS_ENCODER
+  EXP_U : entity work.MOD_MONTGOMERY_EXP
+    generic map(
+      K     => INT_WIDTH,
+      K_EXP => MOD_WIDTH
+    )
     port map(
-      i_x       => i_message,
-      i_moduli  => i_moduli,
-      o_RNS_OUT => msg_rns
+      clk    => clk,
+      rst    => rst,
+      start  => exp_start,
+      i_X    => x_reduced,
+      i_e    => e_reg,
+      i_Mod  => n_reg,
+      o_done => exp_done,
+      o_Z    => exp_z
     );
-
-  GEN_EXP : for i in 0 to NUM_MODULI-1 generate
-    EXP_U : entity work.MOD_MONTGOMERY_EXP
-      generic map(
-        K => MOD_WIDTH
-      )
-      port map(
-        clk        => clk,
-        rst        => rst,
-        start      => exp_start,
-
-        i_X        => msg_rns(i),
-        i_e        => i_exp,
-        i_Mod      => i_moduli(i),
-
-        o_done     => exp_done(i),
-        o_Z        => exp_rns_out(i)
-      );
-  end generate;
-
-  DEC_U : entity work.RNS_DECODER
-    port map(
-      clk      => clk,
-      rst      => rst,
-      start    => dec_pre_start,
-
-      i_moduli => i_moduli,
-      i_rns    => exp_rns_out,
-
-      o_done   => dec_pre_done,
-      o_x      => decoded_result
-    );
-
-  process(exp_done)
-    variable tmp : std_logic;
-  begin
-    tmp := '1';
-    for i in 0 to NUM_MODULI-1 loop
-      tmp := tmp and exp_done(i);
-    end loop;
-    all_exp_done <= tmp;
-  end process;
 
   process(clk)
   begin
     if rising_edge(clk) then
-
       if rst = '1' then
-        state         <= IDLE;
-        exp_start     <= '0';
-        dec_pre_start <= '0';
-        o_done        <= '0';
-        o_result      <= (others => '0');
-
+        state     <= IDLE;
+        exp_start <= '0';
+        o_done    <= '0';
+        o_result  <= (others => '0');
+        x_reduced <= (others => '0');
+        n_reg     <= (others => '0');
+        e_reg     <= (others => '0');
       else
-        exp_start     <= '0';
-        dec_pre_start <= '0';
-        o_done        <= '0';
+        exp_start <= '0';
+        o_done    <= '0';
 
         case state is
-
           when IDLE =>
             if start = '1' then
-              state <= START_EXP;
+              if i_N /= 0 then
+                x_reduced <= resize(i_message mod i_N, INT_WIDTH);
+              else
+                x_reduced <= i_message;
+              end if;
+              n_reg <= i_N;
+              e_reg <= i_exp;
+              state <= REDUCE;
             end if;
-
-          when START_EXP =>
+          when REDUCE =>
             exp_start <= '1';
-            state     <= WAIT_EXP;
-
+            state     <= START_EXP;
+          when START_EXP =>
+            state <= WAIT_EXP;
           when WAIT_EXP =>
-            if all_exp_done = '1' then
-              state <= START_DEC;
+            if exp_done = '1' then
+              state <= LATCH;
             end if;
-
-          when START_DEC =>
-            dec_pre_start <= '1';
-            state         <= WAIT_DEC;
-
-          when WAIT_DEC =>
-            if dec_pre_done = '1' then
-              state <= DONE_STATE;
-            end if;
-
+          when LATCH =>
+            o_result <= exp_z;
+            state    <= DONE_STATE;
           when DONE_STATE =>
-            if i_N /= 0 then
-              o_result <= resize(decoded_result mod i_N, INT_WIDTH);
-            else
-              o_result <= decoded_result;
-            end if;
-
             o_done <= '1';
             state  <= IDLE;
-
         end case;
       end if;
     end if;
   end process;
-
 end RTL;
