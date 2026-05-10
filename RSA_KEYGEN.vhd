@@ -107,18 +107,18 @@ architecture RTL of RSA_KEYGEN is
   -- =========================================================================
   type state_t is (
     IDLE,
-    GEN_P_START,       -- Request random number for p
-    GEN_P_WAIT,        -- Wait for PRNG
-    TEST_P_START,      -- Start Miller-Rabin on p candidate
-    TEST_P_WAIT,       -- Wait for primality result
-    GEN_Q_START,       -- Request random number for q
-    GEN_Q_WAIT,        -- Wait for PRNG
-    TEST_Q_START,      -- Start Miller-Rabin on q candidate
-    TEST_Q_WAIT,       -- Wait for primality result
-    COMPUTE_N,         -- N = p * q, phi = (p-1)*(q-1)
-    GCD_START,         -- Start EXT_GCD for d = e^-1 mod phi
-    GCD_WAIT,          -- Wait for GCD result
-    OUTPUT_KEYS,       -- Latch outputs
+    ST_GEN_P,          -- Request random number for p
+    ST_GEN_P_WAIT,     -- Wait for PRNG
+    ST_TEST_P,         -- Start Miller-Rabin on p candidate
+    ST_TEST_P_WAIT,    -- Wait for primality result
+    ST_GEN_Q,          -- Request random number for q
+    ST_GEN_Q_WAIT,     -- Wait for PRNG
+    ST_TEST_Q,         -- Start Miller-Rabin on q candidate
+    ST_TEST_Q_WAIT,    -- Wait for primality result
+    ST_COMPUTE_N,      -- N = p * q, phi = (p-1)*(q-1)
+    ST_GCD_LAUNCH,     -- Start EXT_GCD for d = e^-1 mod phi
+    ST_GCD_WAIT,       -- Wait for GCD result
+    ST_OUTPUT_KEYS,    -- Latch outputs
     DONE_ST
   );
   signal state : state_t := IDLE;
@@ -238,62 +238,62 @@ begin
         -- ================================================================
         when IDLE =>
           if start = '1' then
-            state <= GEN_P_START;
+            state <= ST_GEN_P;
           end if;
 
         -- ================================================================
         -- Generate candidate for p
         -- ================================================================
-        when GEN_P_START =>
+        when ST_GEN_P =>
           rng_start <= '1';
-          state     <= GEN_P_WAIT;
+          state     <= ST_GEN_P_WAIT;
 
-        when GEN_P_WAIT =>
+        when ST_GEN_P_WAIT =>
           if rng_done = '1' then
             mr_input <= rng_out;
             mr_start <= '1';
-            state    <= TEST_P_START;
+            state    <= ST_TEST_P;
           end if;
 
         -- ================================================================
         -- Test p for primality
         -- ================================================================
-        when TEST_P_START =>
-          state <= TEST_P_WAIT;
+        when ST_TEST_P =>
+          state <= ST_TEST_P_WAIT;
 
-        when TEST_P_WAIT =>
+        when ST_TEST_P_WAIT =>
           if mr_done = '1' then
             if mr_prime = '1' then
               -- p is prime, save it
               p_reg <= mr_input;
-              state <= GEN_Q_START;
+              state <= ST_GEN_Q;
             else
               -- Not prime, try another candidate
-              state <= GEN_P_START;
+              state <= ST_GEN_P;
             end if;
           end if;
 
         -- ================================================================
         -- Generate candidate for q
         -- ================================================================
-        when GEN_Q_START =>
+        when ST_GEN_Q =>
           rng_start <= '1';
-          state     <= GEN_Q_WAIT;
+          state     <= ST_GEN_Q_WAIT;
 
-        when GEN_Q_WAIT =>
+        when ST_GEN_Q_WAIT =>
           if rng_done = '1' then
             mr_input <= rng_out;
             mr_start <= '1';
-            state    <= TEST_Q_START;
+            state    <= ST_TEST_Q;
           end if;
 
         -- ================================================================
         -- Test q for primality
         -- ================================================================
-        when TEST_Q_START =>
-          state <= TEST_Q_WAIT;
+        when ST_TEST_Q =>
+          state <= ST_TEST_Q_WAIT;
 
-        when TEST_Q_WAIT =>
+        when ST_TEST_Q_WAIT =>
           if mr_done = '1' then
             if mr_prime = '1' then
               -- q is prime, save it
@@ -301,53 +301,50 @@ begin
               -- Also ensure p /= q
               if mr_input = p_reg then
                 -- Same as p, try again
-                state <= GEN_Q_START;
+                state <= ST_GEN_Q;
               else
-                state <= COMPUTE_N;
+                state <= ST_COMPUTE_N;
               end if;
             else
               -- Not prime, try another candidate
-              state <= GEN_Q_START;
+              state <= ST_GEN_Q;
             end if;
           end if;
 
         -- ================================================================
         -- Compute N = p*q and phi = (p-1)*(q-1)
         -- ================================================================
-        when COMPUTE_N =>
+        when ST_COMPUTE_N =>
           n_reg   <= resize(p_reg, KEY_WIDTH) * resize(q_reg, KEY_WIDTH);
           phi_reg <= resize(p_reg - 1, KEY_WIDTH) * resize(q_reg - 1, KEY_WIDTH);
-          state   <= GCD_START;
+          state   <= ST_GCD_LAUNCH;
 
         -- ================================================================
         -- Compute d = e^(-1) mod phi
         -- ================================================================
-        when GCD_START =>
+        when ST_GCD_LAUNCH =>
           gcd_e     <= resize(E_VALUE, KEY_WIDTH);
           gcd_phi   <= phi_reg;
           gcd_start <= '1';
-          state     <= GCD_WAIT;
+          state     <= ST_GCD_WAIT;
 
-        when GCD_WAIT =>
+        when ST_GCD_WAIT =>
           if gcd_done = '1' then
             if gcd_valid = '1' then
               d_reg     <= gcd_d;
               valid_reg <= '1';
+              state     <= ST_OUTPUT_KEYS;
             else
-              -- gcd(e, phi) /= 1, should not happen with e=65537 and random primes
-              -- but handle gracefully: retry with new q
+              -- gcd(e, phi) /= 1, retry with new q
               valid_reg <= '0';
-              state     <= GEN_Q_START;
-            end if;
-            if gcd_valid = '1' then
-              state <= OUTPUT_KEYS;
+              state     <= ST_GEN_Q;
             end if;
           end if;
 
         -- ================================================================
         -- Output the generated keys
         -- ================================================================
-        when OUTPUT_KEYS =>
+        when ST_OUTPUT_KEYS =>
           o_N     <= n_reg;
           o_e     <= E_VALUE;
           o_d     <= d_reg;
