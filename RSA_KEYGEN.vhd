@@ -28,7 +28,7 @@ use IEEE.numeric_std.all;
 
 entity RSA_KEYGEN is
   generic(
-    PRIME_WIDTH : positive := 16;  -- Bit width of primes p, q
+    PRIME_WIDTH : positive := 512;  -- Bit width of primes p, q
     NUM_WITNESSES : positive := 4  -- Miller-Rabin rounds
   );
   port(
