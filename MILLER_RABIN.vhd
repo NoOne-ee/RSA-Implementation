@@ -64,17 +64,17 @@ architecture RTL of MILLER_RABIN is
   -- FSM states
   type state_t is (
     IDLE,
-    CHECK_TRIVIAL,        -- Check for n=2, n=3, even
-    DECOMPOSE,            -- Compute s, d such that n-1 = 2^s * d (iterative)
-    LOAD_WITNESS,         -- Select next witness value
-    EXP_START,            -- Launch a^d mod n
-    EXP_WAIT,             -- Wait for exponentiation result
-    CHECK_INITIAL,        -- Check if x == 1 or x == n-1
-    SQ_START,             -- Launch x^2 mod n (squaring loop)
-    SQ_WAIT,              -- Wait for squaring result
-    CHECK_SQUARE,         -- Check if x == n-1
-    COMPOSITE,            -- Determined composite
-    PRIME,                -- Determined probably prime
+    CHECK_TRIVIAL,
+    DECOMPOSE,
+    LOAD_WITNESS,
+    ST_EXP_LAUNCH,
+    ST_EXP_WAIT,
+    CHECK_INITIAL,
+    ST_SQ_LAUNCH,
+    ST_SQ_WAIT,
+    CHECK_SQUARE,
+    COMPOSITE,
+    PROBABLY_PRIME,
     DONE_ST
   );
   signal state : state_t := IDLE;
@@ -96,13 +96,13 @@ architecture RTL of MILLER_RABIN is
   -- Current computation values
   signal x_reg   : unsigned(K-1 downto 0) := (others => '0');
 
-  -- Montgomery exponentiation interface
-  signal exp_start : std_logic := '0';
-  signal exp_base  : unsigned(K-1 downto 0) := (others => '0');
-  signal exp_exp   : unsigned(K-1 downto 0) := (others => '0');
-  signal exp_mod   : unsigned(K-1 downto 0) := (others => '0');
-  signal exp_done  : std_logic;
-  signal exp_result: unsigned(K-1 downto 0);
+  -- Montgomery exponentiation interface signals
+  signal mm_go     : std_logic := '0';
+  signal mm_base   : unsigned(K-1 downto 0) := (others => '0');
+  signal mm_exp    : unsigned(K-1 downto 0) := (others => '0');
+  signal mm_mod    : unsigned(K-1 downto 0) := (others => '0');
+  signal mm_done   : std_logic;
+  signal mm_result : unsigned(K-1 downto 0);
 
   -- Result register
   signal result_reg : std_logic := '0';
@@ -118,12 +118,12 @@ begin
     port map(
       clk    => clk,
       rst    => rst,
-      start  => exp_start,
-      i_X    => exp_base,
-      i_e    => exp_exp,
-      i_Mod  => exp_mod,
-      o_done => exp_done,
-      o_Z    => exp_result
+      start  => mm_go,
+      i_X    => mm_base,
+      i_e    => mm_exp,
+      i_Mod  => mm_mod,
+      o_done => mm_done,
+      o_Z    => mm_result
     );
 
   -- Main FSM
@@ -138,17 +138,17 @@ begin
       wit_idx    <= 0;
       r_cnt      <= 0;
       x_reg      <= (others => '0');
-      exp_start  <= '0';
-      exp_base   <= (others => '0');
-      exp_exp    <= (others => '0');
-      exp_mod    <= (others => '0');
+      mm_go      <= '0';
+      mm_base    <= (others => '0');
+      mm_exp     <= (others => '0');
+      mm_mod     <= (others => '0');
       result_reg <= '0';
       o_done     <= '0';
       o_prime    <= '0';
 
     elsif rising_edge(clk) then
-      exp_start <= '0';
-      o_done    <= '0';
+      mm_go  <= '0';
+      o_done <= '0';
 
       case state is
         -- ================================================================
@@ -204,21 +204,21 @@ begin
             state      <= DONE_ST;
           else
             -- Compute a^d mod n
-            exp_base  <= witnesses(wit_idx);
-            exp_exp   <= d_reg;
-            exp_mod   <= n_reg;
-            exp_start <= '1';
-            state     <= EXP_START;
+            mm_base <= witnesses(wit_idx);
+            mm_exp  <= d_reg;
+            mm_mod  <= n_reg;
+            mm_go   <= '1';
+            state   <= ST_EXP_LAUNCH;
           end if;
 
         -- ================================================================
-        when EXP_START =>
-          state <= EXP_WAIT;
+        when ST_EXP_LAUNCH =>
+          state <= ST_EXP_WAIT;
 
         -- ================================================================
-        when EXP_WAIT =>
-          if exp_done = '1' then
-            x_reg <= exp_result;
+        when ST_EXP_WAIT =>
+          if mm_done = '1' then
+            x_reg <= mm_result;
             state <= CHECK_INITIAL;
           end if;
 
@@ -237,27 +237,27 @@ begin
           else
             -- Start squaring loop
             r_cnt <= 1;
-            state <= SQ_START;
+            state <= ST_SQ_LAUNCH;
           end if;
 
         -- ================================================================
         -- Compute x = x^2 mod n
-        when SQ_START =>
+        when ST_SQ_LAUNCH =>
           if r_cnt >= s_reg then
-            -- Exhausted all squarings without finding n-1 → composite
+            -- Exhausted all squarings without finding n-1 -> composite
             state <= COMPOSITE;
           else
-            exp_base  <= x_reg;
-            exp_exp   <= to_unsigned(2, K);
-            exp_mod   <= n_reg;
-            exp_start <= '1';
-            state     <= SQ_WAIT;
+            mm_base <= x_reg;
+            mm_exp  <= to_unsigned(2, K);
+            mm_mod  <= n_reg;
+            mm_go   <= '1';
+            state   <= ST_SQ_WAIT;
           end if;
 
         -- ================================================================
-        when SQ_WAIT =>
-          if exp_done = '1' then
-            x_reg <= exp_result;
+        when ST_SQ_WAIT =>
+          if mm_done = '1' then
+            x_reg <= mm_result;
             state <= CHECK_SQUARE;
           end if;
 
@@ -278,7 +278,7 @@ begin
             state <= COMPOSITE;
           else
             r_cnt <= r_cnt + 1;
-            state <= SQ_START;
+            state <= ST_SQ_LAUNCH;
           end if;
 
         -- ================================================================
@@ -287,7 +287,7 @@ begin
           state      <= DONE_ST;
 
         -- ================================================================
-        when PRIME =>
+        when PROBABLY_PRIME =>
           result_reg <= '1';
           state      <= DONE_ST;
 
