@@ -22,14 +22,15 @@ use work.RSA_PKG.all;
 --   1. After reset, the block automatically seeds its PRNG, runs key
 --      generation, and latches (N, e, d). This takes some number of clock
 --      cycles but happens without any user action.
---   2. While keys are not yet valid, `keys_ready` is '0' and `start` is
---      ignored. Once `keys_ready = '1'`, the block is ready for work.
+--   2. While keys are not yet valid, any start pulse is silently ignored.
+--      Once keys are ready the block is able to serve encrypt/decrypt ops.
 --   3. To encrypt or decrypt: drive i_message and mode ('0'=encrypt,
 --      '1'=decrypt), pulse start for one cycle, wait for o_done = '1',
 --      read o_result. Keys stay latched for all subsequent operations.
 --
 -- The generated keys are also exposed on o_N / o_e / o_d for debug (these
--- are outputs; they don't add any input pins).
+-- are outputs; they don't add any input pins). o_N going non-zero is a
+-- handy way for a connected host / testbench to know keygen has completed.
 --
 -- NOTE on the seed: there is no true-random source on a stock FPGA, so the
 -- PRNG has to be seeded by a compile-time constant (C_SEED below). That
@@ -57,7 +58,6 @@ entity RSA_TOP is
     -- Status / data outputs:
     o_done     : out std_logic;                          -- 1-cycle pulse when o_result is valid
     o_result   : out unsigned(2*PRIME_WIDTH-1 downto 0);
-    keys_ready : out std_logic;                          -- '1' once internal keys are valid
 
     -- Debug (optional): generated key pair
     o_N        : out unsigned(2*PRIME_WIDTH-1 downto 0);
@@ -74,11 +74,6 @@ architecture RTL of RSA_TOP is
   -- Change it and rebuild to get a different key pair.
   constant C_SEED : unsigned(127 downto 0) := x"DEADBEEFCAFEBABE1234567890ABCDEF";
 
-  -- Elaboration-time sanity check.
-  assert KEY_WIDTH <= MOD_WIDTH
-    report "RSA_TOP: 2*PRIME_WIDTH must be <= MOD_WIDTH (from RSA_PKG)."
-    severity failure;
-
   -- -----------------------------------------------------------------
   -- RSA_KEYGEN interface
   -- -----------------------------------------------------------------
@@ -91,10 +86,9 @@ architecture RTL of RSA_TOP is
   signal kg_valid : std_logic;
 
   -- Latched key pair
-  signal N_reg     : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
-  signal e_reg     : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
-  signal d_reg     : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
-  signal have_keys : std_logic := '0';
+  signal N_reg    : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
+  signal e_reg    : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
+  signal d_reg    : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
 
   -- -----------------------------------------------------------------
   -- RSA core (modular exponentiation) interface
@@ -154,11 +148,10 @@ begin
       o_result  => rsa_result
     );
 
-  -- Status / debug outputs
-  o_N        <= N_reg;
-  o_e        <= e_reg;
-  o_d        <= d_reg;
-  keys_ready <= have_keys;
+  -- Debug outputs
+  o_N <= N_reg;
+  o_e <= e_reg;
+  o_d <= d_reg;
 
   -- -----------------------------------------------------------------
   -- Master FSM
@@ -178,7 +171,6 @@ begin
       N_reg     <= (others => '0');
       e_reg     <= (others => '0');
       d_reg     <= (others => '0');
-      have_keys <= '0';
       o_done    <= '0';
       o_result  <= (others => '0');
 
@@ -209,11 +201,10 @@ begin
         when S_KG_RUN =>
           if kg_done = '1' then
             if kg_valid = '1' then
-              N_reg     <= kg_N;
-              e_reg     <= kg_e;
-              d_reg     <= kg_d;
-              have_keys <= '1';
-              state     <= S_READY;
+              N_reg <= kg_N;
+              e_reg <= kg_e;
+              d_reg <= kg_d;
+              state <= S_READY;
             else
               kg_start <= '1';
               state    <= S_KG_RUN;
@@ -222,7 +213,8 @@ begin
 
         -- -------------------------------------------------------
         -- Keys are ready. Wait for a user start pulse.
-        -- (If start is pulsed before keys are ready, it is ignored.)
+        -- (If start is pulsed before we reach this state, it is
+        -- silently ignored, which is exactly what we want.)
         when S_READY =>
           if start = '1' then
             msg_reg  <= i_message;

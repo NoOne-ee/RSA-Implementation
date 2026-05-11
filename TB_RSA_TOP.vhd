@@ -3,8 +3,9 @@
 --
 -- Testbench for the simplified RSA_TOP.
 -- The only user-facing inputs are clk, rst, i_message, mode, start.
--- After reset, RSA_TOP auto-seeds its PRNG, runs keygen, and raises
--- keys_ready. Then we just feed messages.
+-- After reset, RSA_TOP auto-seeds its PRNG and runs keygen. We detect
+-- completion by watching o_N go non-zero (it starts at 0 on reset and
+-- is only written once keygen succeeds).
 -- =============================================================================
 
 library IEEE;
@@ -18,27 +19,26 @@ end entity;
 architecture SIM of TB_RSA_TOP is
 
   -- Use the design-wide PRIME_WIDTH from RSA_PKG.
-  constant KEY_WIDTH   : positive := 2 * PRIME_WIDTH;
-  constant CLK_PERIOD  : time     := 10 ns;
+  constant KEY_WIDTH  : positive := 2 * PRIME_WIDTH;
+  constant CLK_PERIOD : time     := 10 ns;
 
-  signal clk        : std_logic := '0';
-  signal rst        : std_logic := '1';
+  signal clk       : std_logic := '0';
+  signal rst       : std_logic := '1';
 
   -- User interface
-  signal i_message  : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
-  signal mode       : std_logic := '0';
-  signal start      : std_logic := '0';
-  signal o_done     : std_logic;
-  signal o_result   : unsigned(KEY_WIDTH-1 downto 0);
+  signal i_message : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
+  signal mode      : std_logic := '0';
+  signal start     : std_logic := '0';
+  signal o_done    : std_logic;
+  signal o_result  : unsigned(KEY_WIDTH-1 downto 0);
 
-  -- Status / debug
-  signal keys_ready : std_logic;
-  signal o_N        : unsigned(KEY_WIDTH-1 downto 0);
-  signal o_e        : unsigned(KEY_WIDTH-1 downto 0);
-  signal o_d        : unsigned(KEY_WIDTH-1 downto 0);
+  -- Debug
+  signal o_N       : unsigned(KEY_WIDTH-1 downto 0);
+  signal o_e       : unsigned(KEY_WIDTH-1 downto 0);
+  signal o_d       : unsigned(KEY_WIDTH-1 downto 0);
 
-  signal test_pass  : integer := 0;
-  signal test_fail  : integer := 0;
+  signal test_pass : integer := 0;
+  signal test_fail : integer := 0;
 
 begin
 
@@ -46,17 +46,16 @@ begin
 
   DUT : entity work.RSA_TOP
     port map(
-      clk        => clk,
-      rst        => rst,
-      i_message  => i_message,
-      mode       => mode,
-      start      => start,
-      o_done     => o_done,
-      o_result   => o_result,
-      keys_ready => keys_ready,
-      o_N        => o_N,
-      o_e        => o_e,
-      o_d        => o_d
+      clk       => clk,
+      rst       => rst,
+      i_message => i_message,
+      mode      => mode,
+      start     => start,
+      o_done    => o_done,
+      o_result  => o_result,
+      o_N       => o_N,
+      o_e       => o_e,
+      o_d       => o_d
     );
 
   STIM : process
@@ -81,10 +80,11 @@ begin
       end loop;
     end procedure;
 
+    -- Keygen completion is signalled by o_N becoming non-zero.
     procedure wait_keys is
       variable timeout : integer := 0;
     begin
-      while keys_ready /= '1' loop
+      while o_N = 0 loop
         wait until rising_edge(clk);
         timeout := timeout + 1;
         if timeout > 50000000 then
@@ -145,7 +145,7 @@ begin
     -- After reset, RSA_TOP auto-seeds, auto-runs keygen. Just wait.
     wait_keys;
     wait_clk(2);
-    check(keys_ready = '1', "Keys generated automatically after reset");
+    check(o_N /= 0, "Keys generated automatically after reset");
 
     wait_clk(5);
     report "============================================" severity note;
