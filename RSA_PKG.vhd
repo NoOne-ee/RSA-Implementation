@@ -16,6 +16,19 @@ package RSA_PKG is
   constant MOD_WIDTH  : positive := 32;
   constant INT_WIDTH  : positive := 1024;
 
+  ---------------------------------------------------------------------------
+  -- Key-generation parameters (used by RSA_TOP and RSA_KEYGEN).
+  --
+  -- PRIME_WIDTH   : bit-width of the two generated primes p and q.
+  --                 N = p*q has width 2*PRIME_WIDTH.
+  --                 Must satisfy 2*PRIME_WIDTH <= MOD_WIDTH for the current
+  --                 RSA core (which uses an MOD_WIDTH-bit exponent port).
+  -- NUM_WITNESSES : number of Miller-Rabin rounds used to test primality.
+  --                 Higher = more confidence, slower. 4 is fine for demos.
+  ---------------------------------------------------------------------------
+  constant PRIME_WIDTH   : positive := 16;
+  constant NUM_WITNESSES : positive := 4;
+
   subtype mod_word_t  is unsigned(MOD_WIDTH-1 downto 0);
   type    mod_array_t is array (natural range <>) of mod_word_t;
   

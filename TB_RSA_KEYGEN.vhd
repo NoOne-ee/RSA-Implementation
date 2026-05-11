@@ -21,13 +21,14 @@
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
+use work.RSA_PKG.all;
 
 entity TB_RSA_KEYGEN is
 end entity;
 
 architecture SIM of TB_RSA_KEYGEN is
 
-  constant PRIME_WIDTH : positive := 16;
+  -- Use the design-wide PRIME_WIDTH from RSA_PKG.
   constant KEY_WIDTH   : positive := 2 * PRIME_WIDTH;
   constant CLK_PERIOD  : time := 10 ns;
 
@@ -52,10 +53,6 @@ begin
 
   -- DUT instantiation
   DUT : entity work.RSA_KEYGEN
-    generic map(
-      PRIME_WIDTH   => PRIME_WIDTH,
-      NUM_WITNESSES => 4
-    )
     port map(
       clk     => clk,
       rst     => rst,

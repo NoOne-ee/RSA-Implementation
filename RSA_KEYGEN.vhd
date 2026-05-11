@@ -14,8 +14,9 @@
 --   7. Compute d = e^(-1) mod phi using EXT_GCD (e = 65537 fixed)
 --   8. Output N, e, d
 --
--- For simulation/testability, PRIME_WIDTH is generic (default 16 for fast sim).
--- For real RSA-1024, set PRIME_WIDTH=512.
+-- For simulation/testability, PRIME_WIDTH / NUM_WITNESSES are defined in
+-- RSA_PKG (default PRIME_WIDTH=16 for fast sim). Change them in the package
+-- to rebuild with different sizes.
 --
 -- Note: The multiplications (p*q, (p-1)*(q-1)) are done combinationally
 -- which is fine for simulation. For synthesis at large widths, replace with
@@ -25,12 +26,9 @@
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
+use work.RSA_PKG.all;
 
 entity RSA_KEYGEN is
-  generic(
-    PRIME_WIDTH : positive := 512;  -- Bit width of primes p, q
-    NUM_WITNESSES : positive := 4  -- Miller-Rabin rounds
-  );
   port(
     clk     : in  std_logic;
     rst     : in  std_logic;

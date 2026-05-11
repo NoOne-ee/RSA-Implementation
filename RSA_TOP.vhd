@@ -14,6 +14,10 @@ use work.RSA_PKG.all;
 -- The ONLY user-facing inputs are:
 --   clk, rst, i_message, mode, start
 --
+-- PRIME_WIDTH and NUM_WITNESSES are defined as constants in RSA_PKG so the
+-- whole design agrees on one setting. Change them in the package to rebuild
+-- with different key sizes.
+--
 -- Flow on the FPGA:
 --   1. After reset, the block automatically seeds its PRNG, runs key
 --      generation, and latches (N, e, d). This takes some number of clock
@@ -41,10 +45,6 @@ use work.RSA_PKG.all;
 -- =============================================================================
 
 entity RSA_TOP is
-  generic(
-    PRIME_WIDTH   : positive := 16;
-    NUM_WITNESSES : positive := 4
-  );
   port(
     clk        : in  std_logic;
     rst        : in  std_logic;
@@ -129,10 +129,6 @@ begin
   -- Child instantiations
   -- -----------------------------------------------------------------
   U_KEYGEN : entity work.RSA_KEYGEN
-    generic map(
-      PRIME_WIDTH   => PRIME_WIDTH,
-      NUM_WITNESSES => NUM_WITNESSES
-    )
     port map(
       clk     => clk,
       rst     => rst,
