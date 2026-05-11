@@ -122,7 +122,8 @@ begin
     end procedure;
 
     -- One round-trip: encrypt M, then decrypt, verify equality.
-    procedure round_trip(m : in unsigned(KEY_WIDTH-1 downto 0); label : in string) is
+    -- Note: 'label' is a VHDL reserved word, so use 'tag' instead.
+    procedure round_trip(m : in unsigned(KEY_WIDTH-1 downto 0); tag : in string) is
       variable cipher : unsigned(KEY_WIDTH-1 downto 0);
     begin
       -- Encrypt
@@ -134,7 +135,7 @@ begin
       wait_done;
       wait_clk(1);
       cipher := o_result;
-      check(cipher /= m, label & ": ciphertext differs from plaintext");
+      check(cipher /= m, tag & ": ciphertext differs from plaintext");
 
       -- Decrypt
       i_message <= cipher;
@@ -144,7 +145,7 @@ begin
       start     <= '0';
       wait_done;
       wait_clk(1);
-      check(o_result = m, label & ": decrypt(encrypt(M)) = M");
+      check(o_result = m, tag & ": decrypt(encrypt(M)) = M");
     end procedure;
 
   begin
