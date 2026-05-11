@@ -1,15 +1,10 @@
 -- =============================================================================
 -- TB_RSA_TOP.vhd
 --
--- Testbench for the unified RSA_TOP (keygen + encrypt + decrypt in one block).
--- The user only feeds messages; RSA_TOP handles N, e, d internally.
---
--- Flow:
---   1. Reset, load a non-zero seed.
---   2. Pulse gen_keys, wait for keys_ready.
---   3. Encrypt a message, remember the ciphertext.
---   4. Decrypt the ciphertext, check that we got the original message back.
---   5. Repeat for a few more messages.
+-- Testbench for the simplified RSA_TOP.
+-- The only user-facing inputs are clk, rst, i_message, mode, start.
+-- After reset, RSA_TOP auto-seeds its PRNG, runs keygen, and raises
+-- keys_ready. Then we just feed messages.
 -- =============================================================================
 
 library IEEE;
@@ -28,20 +23,15 @@ architecture SIM of TB_RSA_TOP is
   signal clk        : std_logic := '0';
   signal rst        : std_logic := '1';
 
-  -- Keygen
-  signal seed       : unsigned(127 downto 0) := (others => '0');
-  signal load       : std_logic := '0';
-  signal gen_keys   : std_logic := '0';
-  signal keys_ready : std_logic;
-
-  -- Encrypt / decrypt
+  -- User interface
   signal i_message  : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
   signal mode       : std_logic := '0';
   signal start      : std_logic := '0';
   signal o_done     : std_logic;
   signal o_result   : unsigned(KEY_WIDTH-1 downto 0);
 
-  -- Keys (debug)
+  -- Status / debug
+  signal keys_ready : std_logic;
   signal o_N        : unsigned(KEY_WIDTH-1 downto 0);
   signal o_e        : unsigned(KEY_WIDTH-1 downto 0);
   signal o_d        : unsigned(KEY_WIDTH-1 downto 0);
@@ -61,15 +51,12 @@ begin
     port map(
       clk        => clk,
       rst        => rst,
-      seed       => seed,
-      load       => load,
-      gen_keys   => gen_keys,
-      keys_ready => keys_ready,
       i_message  => i_message,
       mode       => mode,
       start      => start,
       o_done     => o_done,
       o_result   => o_result,
+      keys_ready => keys_ready,
       o_N        => o_N,
       o_e        => o_e,
       o_d        => o_d
@@ -122,7 +109,7 @@ begin
     end procedure;
 
     -- One round-trip: encrypt M, then decrypt, verify equality.
-    -- Note: 'label' is a VHDL reserved word, so use 'tag' instead.
+    -- ('label' is a VHDL reserved word, so the parameter is called 'tag'.)
     procedure round_trip(m : in unsigned(KEY_WIDTH-1 downto 0); tag : in string) is
       variable cipher : unsigned(KEY_WIDTH-1 downto 0);
     begin
@@ -153,28 +140,17 @@ begin
     rst <= '1';
     wait_clk(5);
     rst <= '0';
-    wait_clk(3);
 
     report "============================================" severity note;
-    report "  PHASE 1: Generating RSA key pair" severity note;
+    report "  PHASE 1: Waiting for auto key generation" severity note;
     report "============================================" severity note;
 
-    seed <= x"DEADBEEFCAFEBABE1234567890ABCDEF";
-    load <= '1';
-    wait_clk(1);
-    load <= '0';
-    wait_clk(2);
-
-    gen_keys <= '1';
-    wait_clk(1);
-    gen_keys <= '0';
-
+    -- After reset, RSA_TOP auto-seeds, auto-runs keygen. Just wait.
     wait_keys;
     wait_clk(2);
-    check(keys_ready = '1', "Keys generated successfully");
+    check(keys_ready = '1', "Keys generated automatically after reset");
 
     wait_clk(5);
-
     report "============================================" severity note;
     report "  PHASE 2: Round-trip M=42" severity note;
     report "============================================" severity note;
