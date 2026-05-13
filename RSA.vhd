@@ -3,40 +3,51 @@ use IEEE.std_logic_1164.all;
 use IEEE.numeric_std.all;
 use work.RSA_PKG.all;
 
+-- =============================================================================
+-- RSA.vhd
+--
+-- Simple wrapper around MOD_MONTGOMERY_EXP.
+-- Computes: o_result = i_message ^ i_exp  mod  i_N
+--
+-- All ports are KEY_WIDTH (= 2*PRIME_WIDTH) bits wide, matching the single-K
+-- interface of the user's MOD_MONTGOMERY_EXP.
+-- =============================================================================
+
 entity RSA is
   port(
     clk        : in  std_logic;
     rst        : in  std_logic;
     start      : in  std_logic;
 
-    i_message  : in  unsigned(INT_WIDTH-1 downto 0);
-    i_exp      : in  unsigned(MOD_WIDTH-1 downto 0);
-    i_N        : in  unsigned(INT_WIDTH-1 downto 0);
+    i_message  : in  unsigned(2*PRIME_WIDTH-1 downto 0);
+    i_exp      : in  unsigned(2*PRIME_WIDTH-1 downto 0);
+    i_N        : in  unsigned(2*PRIME_WIDTH-1 downto 0);
 
     o_done     : out std_logic;
-    o_result   : out unsigned(INT_WIDTH-1 downto 0)
+    o_result   : out unsigned(2*PRIME_WIDTH-1 downto 0)
   );
 end entity;
 
 architecture RTL of RSA is
 
+  constant KEY_WIDTH : positive := 2 * PRIME_WIDTH;
+
   type state_t is (IDLE, REDUCE, START_EXP, WAIT_EXP, LATCH, DONE_STATE);
   signal state : state_t := IDLE;
 
-  signal x_reduced : unsigned(INT_WIDTH-1 downto 0) := (others => '0');
-  signal n_reg     : unsigned(INT_WIDTH-1 downto 0) := (others => '0');
-  signal e_reg     : unsigned(MOD_WIDTH-1 downto 0) := (others => '0');
+  signal x_reduced : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
+  signal n_reg     : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
+  signal e_reg     : unsigned(KEY_WIDTH-1 downto 0) := (others => '0');
 
   signal exp_start : std_logic := '0';
   signal exp_done  : std_logic;
-  signal exp_z     : unsigned(INT_WIDTH-1 downto 0);
+  signal exp_z     : unsigned(KEY_WIDTH-1 downto 0);
 
 begin
 
   EXP_U : entity work.MOD_MONTGOMERY_EXP
     generic map(
-      K     => INT_WIDTH,
-      K_EXP => MOD_WIDTH
+      K => KEY_WIDTH
     )
     port map(
       clk    => clk,
@@ -68,7 +79,7 @@ begin
           when IDLE =>
             if start = '1' then
               if i_N /= 0 then
-                x_reduced <= resize(i_message mod i_N, INT_WIDTH);
+                x_reduced <= resize(i_message mod i_N, KEY_WIDTH);
               else
                 x_reduced <= i_message;
               end if;

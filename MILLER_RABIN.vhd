@@ -46,16 +46,15 @@ architecture RTL of MILLER_RABIN is
   -- MOD_MONTGOMERY_EXP component declaration
   component MOD_MONTGOMERY_EXP is
     generic(
-      K     : positive;
-      K_EXP : positive
+      K : positive
     );
     port(
       clk    : in  std_logic;
       rst    : in  std_logic;
       start  : in  std_logic;
-      i_X    : in  unsigned(K-1     downto 0);
-      i_e    : in  unsigned(K_EXP-1 downto 0);
-      i_Mod  : in  unsigned(K-1     downto 0);
+      i_X    : in  unsigned(K-1 downto 0);
+      i_e    : in  unsigned(K-1 downto 0);
+      i_Mod  : in  unsigned(K-1 downto 0);
       o_done : out std_logic;
       o_Z    : out unsigned(K-1 downto 0)
     );
@@ -112,8 +111,7 @@ begin
   -- Instantiate Montgomery exponentiation (exponent same width as base)
   EXP_UNIT : MOD_MONTGOMERY_EXP
     generic map(
-      K     => K,
-      K_EXP => K
+      K => K
     )
     port map(
       clk    => clk,
