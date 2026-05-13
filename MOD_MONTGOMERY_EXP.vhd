@@ -4,222 +4,241 @@ use IEEE.numeric_std.all;
 
 entity MOD_MONTGOMERY_EXP is
   generic(
-    K     : positive := 1024;
-    K_EXP : positive := 32
+    K : positive := 8
   );
   port(
-    clk      : in  std_logic;
-    rst      : in  std_logic;
-    start    : in  std_logic;
-    i_X      : in  unsigned(K-1     downto 0);
-    i_e      : in  unsigned(K_EXP-1 downto 0);
-    i_Mod    : in  unsigned(K-1     downto 0);
-    o_done   : out std_logic;
-    o_Z      : out unsigned(K-1 downto 0)
+    clk         : in  std_logic;
+    rst         : in  std_logic;
+    start       : in  std_logic;
+
+    i_X         : in  unsigned(K-1 downto 0);
+    i_e         : in  unsigned(K-1 downto 0);
+    i_Mod       : in  unsigned(K-1 downto 0);
+
+    o_done      : out std_logic;
+    o_Z         : out unsigned(K-1 downto 0)
   );
 end entity;
 
 architecture RTL of MOD_MONTGOMERY_EXP is
-  component MONTGOMERY_MULT is
-    generic(K : positive);
-    port(
-      clk    : in  std_logic;
-      rst    : in  std_logic;
-      start  : in  std_logic;
-      i_X    : in  unsigned(K-1 downto 0);
-      i_Y    : in  unsigned(K-1 downto 0);
-      i_M    : in  unsigned(K-1 downto 0);
-      o_done : out std_logic;
-      o_Z    : out unsigned(K-1 downto 0)
+
+    component MONTGOMERY_MULT is
+        generic(
+            K : positive := 8
+        );
+        port(
+            clk    : in  std_logic;
+            rst    : in  std_logic;
+            start  : in  std_logic;
+
+            i_X    : in  unsigned(K-1 downto 0);
+            i_Y    : in  unsigned(K-1 downto 0);
+            i_M    : in  unsigned(K-1 downto 0);
+
+            o_done : out std_logic;
+            o_Z    : out unsigned(K-1 downto 0)
+        );
+    end component;
+    
+	type state_t is (
+        IDLE,
+		PRECOMPUTE_R2, -- Phase 0 : Compute r^2 mod mi = (2^k)^2 mod mi
+        INIT_MONTG,    -- Phase 1 : launch  MM(1,r2,N) and MM(M,r2,N) in parallel
+        WAIT_INIT,     -- Phase 1 : wait for both to complete
+        STEP,          -- Phase 2 : launch  MM(S,S,N)  and (if ei=1) MM(C,S,N)
+        WAIT_STEP,     -- Phase 2 : wait; accumulate result
+        FINAL,         -- Phase 3 : launch  MM(C,1,N)  to exit Montgomery domain
+        WAIT_FINAL,    -- Phase 3 : wait
+        DONE
     );
-  end component;
-
-  type state_t is (IDLE, PRECOMPUTE_R2,
-                   INIT_Z_START, INIT_Z_WAIT,
-                   INIT_S_START, INIT_S_WAIT,
-                   STEP_DECIDE,
-                   SQ_START, SQ_WAIT,     -- SQ_START properly used
-                   MUL_START, MUL_WAIT,
-                   FINAL_START, FINAL_WAIT, DONE);
-  signal STATE : state_t := IDLE;
-
-  signal s_X, s_Mod : unsigned(K-1     downto 0) := (others => '0');
-  signal s_E        : unsigned(K_EXP-1 downto 0) := (others => '0');
-
-  signal s_r2      : unsigned(K   downto 0) := (others => '0');
-  signal r2_result : unsigned(K-1 downto 0) := (others => '0');
-  signal r2_count  : integer range 0 to 2*K := 0;
-
-  signal reg_Z : unsigned(K-1 downto 0) := (others => '0');
-  signal reg_S : unsigned(K-1 downto 0) := (others => '0');
-  -- Latch to hold squaring result before multiply step
-  signal sq_result : unsigned(K-1 downto 0) := (others => '0');
-
-  signal bit_index : integer range -1 to K_EXP-1 := K_EXP-1;
-
-  signal mm_start : std_logic := '0';
-  signal mm_A     : unsigned(K-1 downto 0) := (others => '0');
-  signal mm_B     : unsigned(K-1 downto 0) := (others => '0');
-  signal mm_Z     : unsigned(K-1 downto 0);
-  signal mm_done  : std_logic;
-
+	signal STATE    : state_t := IDLE;
+     
+	signal s_X, s_E, s_Mod, s_r_square : unsigned(k-1 downto 0) := (others => '0');
+	
+	signal s_r2      : unsigned(K downto 0)   := (others => '0'); -- working register (K+1 bits)
+    signal r2_result : unsigned(K-1 downto 0) := (others => '0'); -- final r^2 mod M (K bits)
+    signal r2_count  : integer range 0 to 2*K := 0;               -- counts 2K doubling steps
+	
+	signal reg_Z                       : unsigned(k-1 downto 0)   := (others => '0'); -- for the MM(1,r2,N)
+	signal reg_S                       : unsigned(k-1 downto 0)   := (others => '0'); -- for the MM(M,r2,N)
+	
+	signal bit_index                   : integer range 0 to k := 0;
+	
+	--MM_CxS: used for the multiplicatin (C = Montg(C,S,M)
+	signal mm_cs_start      : std_logic := '0';
+	signal mm_cs_A, mm_cs_B : unsigned(k-1 downto 0) := (others => '0');
+	signal mm_cs_Z          : unsigned(k-1 downto 0)   := (others => '0');
+	signal mm_cs_done       : std_logic; 
+	
+	--MM_SxS: used for the squaring (C = Montg(S,S,M)
+	signal mm_ss_start      : std_logic := '0';
+	signal mm_ss_A, mm_ss_B : unsigned(k-1 downto 0) := (others => '0');
+	signal mm_ss_Z          : unsigned(k-1 downto 0)   := (others => '0');
+	signal mm_ss_done       : std_logic; 
+	
 begin
-  MM : MONTGOMERY_MULT
-    generic map(K => K)
-    port map(clk, rst, mm_start, mm_A, mm_B, s_Mod, mm_done, mm_Z);
+    
+	--MM_CxS: The Multiplication
+	MM_CxS: MONTGOMERY_MULT
+	    generic map(
+            K => K 
+        )
+        port map(
+            clk    => clk,
+            rst    => rst,
+            start  => mm_cs_start,
 
-  process(clk, rst)
-    variable doubled : unsigned(K+1 downto 0);
-  begin
-    if rst = '1' then
-      STATE     <= IDLE;
-      s_X       <= (others=>'0');
-      s_E       <= (others=>'0');
-      s_Mod     <= (others=>'0');
-      s_r2      <= (others=>'0');
-      r2_result <= (others=>'0');
-      r2_count  <= 0;
-      reg_Z     <= (others=>'0');
-      reg_S     <= (others=>'0');
-      sq_result <= (others=>'0');
-      bit_index <= K_EXP-1;
-      mm_start  <= '0';
-      mm_A      <= (others=>'0');
-      mm_B      <= (others=>'0');
-      o_Z       <= (others=>'0');
-      o_done    <= '0';
+            i_X    => mm_cs_A,
+            i_Y    => mm_cs_B,
+            i_M    => s_Mod,
 
-    elsif rising_edge(clk) then
-      mm_start <= '0';
-      o_done   <= '0';
+            o_done => mm_cs_done,
+            o_Z    => mm_cs_Z
+        );
+		
+    --MM_SxS: The Squaring		
+	MM_SxS: MONTGOMERY_MULT
+	    generic map(
+            K => K
+        )
+        port map(
+            clk    => clk,
+            rst    => rst,
+            start  => mm_ss_start,
 
-      case STATE is
-        -- ----------------------------------------------------------------
-        when IDLE =>
-          if start = '1' then
-            s_X      <= i_X;
-            s_E      <= i_e;
-            s_Mod    <= i_Mod;
-            s_r2     <= to_unsigned(1, K+1);
-            r2_count <= 0;
-            STATE    <= PRECOMPUTE_R2;
-          end if;
+            i_X    => mm_ss_A,
+            i_Y    => mm_ss_B,
+            i_M    => s_Mod,
 
-        -- ----------------------------------------------------------------
-        -- Compute R^2 mod N by repeated doubling (2K doublings gives R^2)
-        when PRECOMPUTE_R2 =>
-          if r2_count = 2*K then
-            r2_result <= resize(s_r2, K);
-            STATE     <= INIT_Z_START;
-          else
-            doubled := ('0' & s_r2) + ('0' & s_r2);
-            if doubled >= resize(s_Mod, doubled'length) then
-              s_r2 <= resize(doubled - resize(s_Mod, doubled'length), K+1);
-            else
-              s_r2 <= resize(doubled, K+1);
-            end if;
-            r2_count <= r2_count + 1;
-          end if;
+            o_done => mm_ss_done,
+            o_Z    => mm_ss_Z
+        );
+		
+    
+	process(clk, rst)
+	    variable doubled : unsigned(k downto 0);
+    begin
+	    if rst = '1' then
+		    STATE       <= IDLE;
+            s_X         <= (others => '0');
+            s_E         <= (others => '0');
+            s_Mod       <= (others => '0');
+			s_r2        <= (others => '0');
+			r2_result   <= (others => '0');
+			r2_count    <= 0;
+            reg_Z       <= (others => '0');
+			reg_S       <= (others => '0');
+            bit_index   <= 0;
+			mm_cs_start <= '0';
+            mm_ss_start <= '0';
+			mm_cs_A     <= (others => '0');
+			mm_cs_B     <= (others => '0');
+			mm_ss_A     <= (others => '0');
+			mm_ss_B     <= (others => '0');
+			o_Z         <= (others => '0');
+			o_done      <= '0';
+		
+		elsif rising_edge(clk) then
+		
+		    mm_cs_start <= '0';
+			mm_ss_start <= '0';
+			o_done <= '0';
+			
+			case STATE is
+			    
+			    when IDLE =>
+				    if start = '1' then
+					    s_X        <= i_X;
+						s_E        <= i_E;
+						s_Mod      <= i_Mod;
+						s_r2       <= to_unsigned(1, k+1);
+						r2_count   <= 0;
+						STATE      <= PRECOMPUTE_R2;
+					end if;
+					
+			    when PRECOMPUTE_R2 => 
+				    if r2_count = 2*K then
+                        -- done: latch result and move on
+                        r2_result <= s_r2(K-1 downto 0);
+                        bit_index <= 0;
+                        STATE     <= INIT_MONTG;
+                    else
+                        -- one doubling step with modular reduction
+                        doubled := shift_left(s_r2, 1);           -- 2 * s_r2, K+1 bits
+                        if doubled >= ('0' & s_Mod) then          -- compare with zero-extended M
+                            s_r2 <= doubled - ('0' & s_Mod);      -- reduce mod M
+                        else
+                            s_r2 <= doubled;
+                        end if;
+                        r2_count <= r2_count + 1;
+                    end if;
+				
+				when INIT_MONTG => 
+					mm_cs_A     <= to_unsigned(1, K);
+			        mm_cs_B     <= r2_result;
+					mm_cs_start <= '1';         -- For launching C = Montg(1, r^2, M)
+					
+			        mm_ss_A     <= s_X;
+			        mm_ss_B     <= r2_result;       
+                    mm_ss_start <= '1';         -- For launching S = Montg(X, r^2, M)
+					
+					STATE       <= WAIT_INIT;
+					
+				when WAIT_INIT =>      -- In this state, we wait until calcul is done then we assign it to the output
+				    if mm_cs_done = '1' and mm_ss_done = '1' then
+					    reg_Z     <= mm_cs_Z;
+						reg_S     <= mm_ss_Z;
+						bit_index <= 0;
+                        STATE     <= STEP;
+                    end if;
+                
+			    when STEP => 
+				    if bit_index = K then 
+					    STATE <= FINAL;
+					else 
+					    mm_cs_A     <= reg_Z;
+						mm_cs_B     <= reg_S;
+						mm_cs_start <= '1'; -- Launch C = Montg(C, S, M);
+						
+						mm_ss_A     <= reg_S;
+						mm_ss_B     <= reg_S;
+						mm_ss_start <= '1'; -- Launch S = Montg(S, S, M);
+						
+						STATE <= WAIT_STEP;
+					end if;
+				
+				when WAIT_STEP =>
+				    if mm_cs_done = '1' and mm_ss_done = '1' then
+					    reg_S     <= mm_ss_Z; -- always update S 
+					
+					    if s_E(bit_index) = '1' then 
+					        reg_Z <= mm_cs_Z;
+					    end if;
+					
+					    bit_index <= bit_index + 1;
+					    STATE     <= STEP;
+					end if;
+				
+				when FINAL =>
+				    mm_cs_A     <= reg_Z;
+					mm_cs_B     <= to_unsigned(1, k);
+					mm_cs_start <= '1';
+					STATE       <= WAIT_FINAL;
+				
+				when WAIT_FINAL =>
+				    if mm_cs_done = '1' then
+					    reg_Z <= mm_cs_Z; -- Final result C = X^E mod M
+						o_Z <= mm_cs_Z;
+						STATE <= DONE;
+				    end if;
+					
+				when DONE =>
+				    o_done <= '1';
+				    if start = '0' then 
+					    STATE <= IDLE;
+				    end if;
+			end case;
+		end if;
+	end process;
 
-        -- ----------------------------------------------------------------
-        -- Z_mont = MonMul(1, R^2) = R mod N  (Montgomery form of 1)
-        when INIT_Z_START =>
-          mm_A     <= to_unsigned(1, K);
-          mm_B     <= r2_result;
-          mm_start <= '1';
-          STATE    <= INIT_Z_WAIT;
-
-        when INIT_Z_WAIT =>
-          if mm_done = '1' then
-            reg_Z <= mm_Z;
-            STATE <= INIT_S_START;
-          end if;
-
-        -- ----------------------------------------------------------------
-        -- S_mont = MonMul(X, R^2) = X*R mod N  (Montgomery form of X)
-        when INIT_S_START =>
-          mm_A     <= s_X;
-          mm_B     <= r2_result;
-          mm_start <= '1';
-          STATE    <= INIT_S_WAIT;
-
-        when INIT_S_WAIT =>
-          if mm_done = '1' then
-            reg_S     <= mm_Z;
-            bit_index <= K_EXP-1;
-            STATE     <= STEP_DECIDE;
-          end if;
-
-        -- ----------------------------------------------------------------
-        -- Square-and-multiply loop (MSB first)
-        when STEP_DECIDE =>
-          if bit_index < 0 then
-            STATE <= FINAL_START;
-          else
-            -- Launch squaring: Z = Z^2
-            mm_A     <= reg_Z;
-            mm_B     <= reg_Z;
-            mm_start <= '1';
-            STATE    <= SQ_START;     -- NEW: dedicated start state
-          end if;
-
-        -- SQ_START: multiplier has been given start pulse; now wait
-        when SQ_START =>
-          STATE <= SQ_WAIT;
-
-        when SQ_WAIT =>
-          if mm_done = '1' then
-            reg_Z     <= mm_Z;
-            sq_result <= mm_Z;        -- latch result before next mul
-            if s_E(bit_index) = '1' then
-              STATE <= MUL_START;
-            else
-              bit_index <= bit_index - 1;
-              STATE     <= STEP_DECIDE;
-            end if;
-          end if;
-
-        -- MUL_START: use latched sq_result (not live mm_Z) to avoid race
-        when MUL_START =>
-          mm_A     <= sq_result;      -- FIXED: was mm_Z (stale wire)
-          mm_B     <= reg_S;
-          mm_start <= '1';
-          STATE    <= MUL_WAIT;
-
-        when MUL_WAIT =>
-          if mm_done = '1' then
-            reg_Z     <= mm_Z;
-            bit_index <= bit_index - 1;
-            STATE     <= STEP_DECIDE;
-          end if;
-
-        -- ----------------------------------------------------------------
-        -- Final conversion: result = MonMul(Z_mont, 1) = Z mod N
-        when FINAL_START =>
-          mm_A     <= reg_Z;
-          mm_B     <= to_unsigned(1, K);
-          mm_start <= '1';
-          STATE    <= FINAL_WAIT;
-
-        when FINAL_WAIT =>
-          if mm_done = '1' then
-            o_Z   <= mm_Z;
-            STATE <= DONE;
-          end if;
-
-        when DONE =>
-          o_done <= '1';
-          if start = '0' then
-            STATE <= IDLE;
-          end if;
-
-        when others =>
-          -- Should never be reached; safely return to IDLE
-          STATE    <= IDLE;
-          mm_start <= '0';
-          o_done   <= '0';
-
-      end case;
-    end if;
-  end process;
 end RTL;
