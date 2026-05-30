@@ -47,26 +47,26 @@
 \fancyfoot[C]{\thepage}
 
 % ============================== TITLE ==============================
-\title{\textbf{RSA Implementation}}
+\title{RSA Implementation}
 \author{}
 \date{}
 
 \begin{document}
 
-\maketitle
+\chapter{RSA Implementation}
 
 
 % ======================================================================
 %                   CHAPTER 2 : FONDEMENTS THÉORIQUES
 % ======================================================================
-\chapter{Fondements Théoriques}
+\section{Fondements Théoriques}
 \label{ch:theory}
 
-\section{Algorithme RSA}
+\subsection{Algorithme RSA}
 L'algorithme RSA repose sur la difficulté de factoriser le produit de
 deux grands nombres premiers.
 
-\subsection{Génération de clés}
+\subsubsection{Génération de clés}
 \begin{enumerate}
   \item Choisir deux nombres premiers $p$ et $q$ de $k/2$ bits chacun.
   \item Calculer $N = p \times q$ \quad (module RSA, $k$ bits).
@@ -78,7 +78,7 @@ deux grands nombres premiers.
 \end{enumerate}
 La clé publique est $(N, e)$, la clé privée est $(N, d)$.
 
-\subsection{Chiffrement et déchiffrement}
+\subsubsection{Chiffrement et déchiffrement}
 \begin{align}
   \text{Chiffrement :} \quad c &= m^e \bmod N \\
   \text{Déchiffrement :} \quad m &= c^d \bmod N
@@ -86,12 +86,12 @@ La clé publique est $(N, e)$, la clé privée est $(N, d)$.
 où $m < N$ est le message en clair et $c$ est le chiffré.
 
 
-\section{Multiplication de Montgomery}
+\subsection{Multiplication de Montgomery}
 
 La multiplication de Montgomery permet d'effectuer des réductions modulaires
 sans division explicite, en travaillant dans un domaine transformé.
 
-\subsection{Principe}
+\subsubsection{Principe}
 Soit $R = 2^K$ avec $\gcd(R, N) = 1$ (N impair). La forme de Montgomery
 d'un entier $a$ est $\bar{a} = a \cdot R \bmod N$.
 
@@ -100,7 +100,7 @@ La \textbf{réduction de Montgomery} calcule :
   \text{MonPro}(a, b) = a \cdot b \cdot R^{-1} \bmod N
 \]
 
-\subsection{Algorithme bit-sériel}
+\subsubsection{Algorithme bit-sériel}
 L'implémentation utilise l'algorithme bit-sériel de Montgomery :
 \begin{enumerate}
   \item $S \leftarrow 0$
@@ -119,7 +119,7 @@ cycles par multiplication (K cycles de calcul + 1 cycle de correction
 + 1 cycle de sortie).
 
 
-\section{Exponentiation modulaire par Montgomery}
+\subsection{Exponentiation modulaire par Montgomery}
 
 L'exponentiation $X^E \bmod N$ utilise la méthode \textit{square-and-multiply}
 (LSB-first dans notre implémentation) avec deux instances de Montgomery :
@@ -138,7 +138,7 @@ L'exponentiation $X^E \bmod N$ utilise la méthode \textit{square-and-multiply}
   \item $Z = \text{MonPro}(\bar{Z}, 1)$ \quad (retour au domaine normal).
 \end{enumerate}
 
-\section{Test de primalité de Miller-Rabin}
+\subsection{Test de primalité de Miller-Rabin}
 
 Pour la génération de clés, les candidats premiers sont testés par
 l'algorithme de Miller-Rabin avec $t$ témoins ($a = 2, 3, 5, 7$).
@@ -151,7 +151,7 @@ Soit $n - 1 = 2^s \cdot d$ avec $d$ impair. Pour chaque témoin $a$ :
   \item Si aucun passage : $n$ est composé.
 \end{enumerate}
 
-\section{Algorithme d'Euclide étendu (EXT\_GCD)}
+\subsection{Algorithme d'Euclide étendu (EXT\_GCD)}
 Calcule $d = e^{-1} \bmod \varphi(N)$ par l'algorithme itératif classique
 avec division et multiplication séquentielles (un bit par cycle).
 
@@ -159,10 +159,10 @@ avec division et multiplication séquentielles (un bit par cycle).
 % ======================================================================
 %                   CHAPTER 3 : ARCHITECTURE GLOBALE
 % ======================================================================
-\chapter{Architecture Globale}
+\section{Architecture Globale}
 \label{ch:archi}
 
-\section{Vue d'ensemble}
+\subsection{Vue d'ensemble}
 
 L'architecture est hiérarchique et modulaire. Le schéma ci-dessous montre
 les blocs principaux et leurs interconnexions :
@@ -218,7 +218,7 @@ les blocs principaux et leurs interconnexions :
 \end{figure}
 
 
-\section{Hiérarchie des entités}
+\subsection{Hiérarchie des entités}
 
 \begin{table}[H]
 \centering
@@ -242,7 +242,7 @@ les blocs principaux et leurs interconnexions :
 \end{tabular}
 \end{table}
 
-\section{Paramètres de conception}
+\subsection{Paramètres de conception}
 
 \begin{table}[H]
 \centering
@@ -265,11 +265,11 @@ LFSR                    & 128 bits & Graine PRNG \\
 % ======================================================================
 %              CHAPTER 4 : DESCRIPTION DES ENTITÉS
 % ======================================================================
-\chapter{Description Détaillée des Entités}
+\section{Description Détaillée des Entités}
 \label{ch:entities}
 
 % ----------------------------------------------------------------------
-\section{RSA\_PKG --- Package de constantes}
+\subsection{RSA\_PKG --- Package de constantes}
 \label{sec:pkg}
 
 Ce package centralise les constantes globales et la fonction
@@ -289,10 +289,10 @@ Ce package centralise les constantes globales et la fonction
 \end{table}
 
 % ----------------------------------------------------------------------
-\section{RANDOM\_GEN --- Générateur pseudo-aléatoire}
+\subsection{RANDOM\_GEN --- Générateur pseudo-aléatoire}
 \label{sec:rng}
 
-\subsection{Fonction}
+\subsubsection{Fonction}
 Génère des nombres pseudo-aléatoires de \texttt{WIDTH} bits à partir
 d'un LFSR (Linear Feedback Shift Register) de 128 bits. Le polynôme
 de rétroaction est :
@@ -301,7 +301,7 @@ de rétroaction est :
 \]
 La sortie est forcée impaire (LSB $= 1$) et de pleine longueur (MSB $= 1$).
 
-\subsection{Interface}
+\subsubsection{Interface}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{RANDOM\_GEN}}
@@ -321,7 +321,7 @@ La sortie est forcée impaire (LSB $= 1$) et de pleine longueur (MSB $= 1$).
 \end{table}
 
 
-\subsection{Machine d'états}
+\subsubsection{Machine d'états}
 \begin{enumerate}
   \item \textbf{IDLE} : attente d'une requête \texttt{start}.
   \item \textbf{STEP} : avance le LFSR et accumule 128 bits par cycle
@@ -330,7 +330,7 @@ La sortie est forcée impaire (LSB $= 1$) et de pleine longueur (MSB $= 1$).
   \item \textbf{DONE\_ST} : présente la sortie pendant un cycle.
 \end{enumerate}
 
-\subsection{Simulation}
+\subsubsection{Simulation}
 \begin{figure}[H]
 \centering
 % === INSÉRER ICI LA CAPTURE DE SIMULATION ===
@@ -342,15 +342,15 @@ La sortie est forcée impaire (LSB $= 1$) et de pleine longueur (MSB $= 1$).
 \end{figure}
 
 % ----------------------------------------------------------------------
-\section{MILLER\_RABIN --- Test de primalité}
+\subsection{MILLER\_RABIN --- Test de primalité}
 \label{sec:mr}
 
-\subsection{Fonction}
+\subsubsection{Fonction}
 Teste si un nombre $n$ de $K$ bits est probablement premier en utilisant
 l'algorithme de Miller-Rabin avec \texttt{NUM\_WITNESSES} témoins
 fixes ($a \in \{2, 3, 5, 7\}$).
 
-\subsection{Interface}
+\subsubsection{Interface}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{MILLER\_RABIN}}
@@ -369,7 +369,7 @@ fixes ($a \in \{2, 3, 5, 7\}$).
 \end{table}
 
 
-\subsection{Machine d'états}
+\subsubsection{Machine d'états}
 \begin{enumerate}
   \item \textbf{IDLE} : attente.
   \item \textbf{CHECK\_TRIVIAL} : cas triviaux ($n=2,3$, $n$ pair).
@@ -385,7 +385,7 @@ fixes ($a \in \{2, 3, 5, 7\}$).
   \item \textbf{DONE\_ST} : sortie du résultat.
 \end{enumerate}
 
-\subsection{Simulation}
+\subsubsection{Simulation}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
@@ -397,15 +397,15 @@ fixes ($a \in \{2, 3, 5, 7\}$).
 \end{figure}
 
 % ----------------------------------------------------------------------
-\section{EXT\_GCD --- Euclide étendu}
+\subsection{EXT\_GCD --- Euclide étendu}
 \label{sec:gcd}
 
-\subsection{Fonction}
+\subsubsection{Fonction}
 Calcule l'inverse modulaire $d = e^{-1} \bmod \varphi(N)$ en utilisant
 l'algorithme d'Euclide étendu itératif. La division et la multiplication
 internes sont réalisées en séquentiel (un bit par cycle).
 
-\subsection{Interface}
+\subsubsection{Interface}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{EXT\_GCD}}
@@ -426,7 +426,7 @@ internes sont réalisées en séquentiel (un bit par cycle).
 \end{table}
 
 
-\subsection{Machine d'états}
+\subsubsection{Machine d'états}
 \begin{enumerate}
   \item \textbf{IDLE} : attente de \texttt{start}.
   \item \textbf{CHECK\_ZERO} : si $r = 0$, l'algorithme est terminé.
@@ -440,7 +440,7 @@ internes sont réalisées en séquentiel (un bit par cycle).
   \item \textbf{DONE\_ST} : sortie.
 \end{enumerate}
 
-\subsection{Simulation}
+\subsubsection{Simulation}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
@@ -452,10 +452,10 @@ internes sont réalisées en séquentiel (un bit par cycle).
 \end{figure}
 
 % ----------------------------------------------------------------------
-\section{MONTGOMERY\_MULT --- Multiplieur de Montgomery}
+\subsection{MONTGOMERY\_MULT --- Multiplieur de Montgomery}
 \label{sec:mont_mult}
 
-\subsection{Fonction}
+\subsubsection{Fonction}
 Calcule le produit de Montgomery :
 \[
   Z = X \cdot Y \cdot R^{-1} \bmod M
@@ -463,7 +463,7 @@ Calcule le produit de Montgomery :
 où $R = 2^K$. L'algorithme est bit-sériel : un bit de $X$ est traité par
 cycle d'horloge.
 
-\subsection{Interface}
+\subsubsection{Interface}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{MONTGOMERY\_MULT}}
@@ -484,7 +484,7 @@ cycle d'horloge.
 \end{table}
 
 
-\subsection{Machine d'états}
+\subsubsection{Machine d'états}
 \begin{enumerate}
   \item \textbf{IDLE} : capture des entrées sur \texttt{start}.
   \item \textbf{RUN} : boucle de $K$ cycles (un bit de $X$ par cycle).
@@ -496,10 +496,10 @@ cycle d'horloge.
         puis \texttt{o\_done} = 1.
 \end{enumerate}
 
-\subsection{Latence}
+\subsubsection{Latence}
 $K + 2$ cycles par multiplication (K itérations + DONE + retour IDLE).
 
-\subsection{Simulation}
+\subsubsection{Simulation}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
@@ -511,15 +511,15 @@ $K + 2$ cycles par multiplication (K itérations + DONE + retour IDLE).
 \end{figure}
 
 % ----------------------------------------------------------------------
-\section{MOD\_MONTGOMERY\_EXP --- Exponentiation modulaire}
+\subsection{MOD\_MONTGOMERY\_EXP --- Exponentiation modulaire}
 \label{sec:mod_exp}
 
-\subsection{Fonction}
+\subsubsection{Fonction}
 Calcule $Z = X^E \bmod M$ en utilisant la méthode \textit{square-and-multiply}
 (LSB-first) avec deux instances de \texttt{MONTGOMERY\_MULT} (une pour le
 carré, une pour la multiplication conditionnelle).
 
-\subsection{Interface}
+\subsubsection{Interface}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{MOD\_MONTGOMERY\_EXP}}
@@ -540,7 +540,7 @@ carré, une pour la multiplication conditionnelle).
 \end{table}
 
 
-\subsection{Machine d'états}
+\subsubsection{Machine d'états}
 \begin{enumerate}
   \item \textbf{IDLE} : capture de $X$, $E$, $M$.
   \item \textbf{PRECOMPUTE\_R2} : calcul de $R^2 \bmod M$ par $2K$
@@ -558,7 +558,7 @@ carré, une pour la multiplication conditionnelle).
   \item \textbf{DONE} : sortie de $o\_Z$.
 \end{enumerate}
 
-\subsection{Nombre de cycles}
+\subsubsection{Nombre de cycles}
 \begin{table}[H]
 \centering
 \caption{Décomposition du nombre de cycles (\texttt{MOD\_MONTGOMERY\_EXP})}
@@ -576,7 +576,7 @@ FINAL (1 × MonMul)     & 1026 \\
 \end{tabular}
 \end{table}
 
-\subsection{Simulation}
+\subsubsection{Simulation}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
@@ -589,15 +589,15 @@ FINAL (1 × MonMul)     & 1026 \\
 
 
 % ----------------------------------------------------------------------
-\section{RSA --- Wrapper d'exponentiation}
+\subsection{RSA --- Wrapper d'exponentiation}
 \label{sec:rsa}
 
-\subsection{Fonction}
+\subsubsection{Fonction}
 Entité enveloppe qui effectue $o\_result = i\_message^{i\_exp} \bmod i\_N$.
 Elle réduit d'abord le message ($m \bmod N$) puis lance
 \texttt{MOD\_MONTGOMERY\_EXP}.
 
-\subsection{Interface}
+\subsubsection{Interface}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{RSA}}
@@ -617,7 +617,7 @@ Elle réduit d'abord le message ($m \bmod N$) puis lance
 \end{tabular}
 \end{table}
 
-\subsection{Machine d'états}
+\subsubsection{Machine d'états}
 \begin{enumerate}
   \item \textbf{IDLE} : capture des entrées, calcul de $m \bmod N$.
   \item \textbf{REDUCE} : stabilisation.
@@ -628,7 +628,7 @@ Elle réduit d'abord le message ($m \bmod N$) puis lance
   \item \textbf{DONE\_STATE} : \texttt{o\_done} = 1.
 \end{enumerate}
 
-\subsection{Simulation}
+\subsubsection{Simulation}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
@@ -641,10 +641,10 @@ Elle réduit d'abord le message ($m \bmod N$) puis lance
 
 
 % ----------------------------------------------------------------------
-\section{RSA\_KEYGEN --- Génération de clés}
+\subsection{RSA\_KEYGEN --- Génération de clés}
 \label{sec:keygen}
 
-\subsection{Fonction}
+\subsubsection{Fonction}
 Orchestre la génération complète d'une paire de clés RSA :
 \begin{enumerate}
   \item Génère un candidat $p$ via \texttt{RANDOM\_GEN}.
@@ -655,7 +655,7 @@ Orchestre la génération complète d'une paire de clés RSA :
   \item Sort $(N, e, d)$.
 \end{enumerate}
 
-\subsection{Interface}
+\subsubsection{Interface}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{RSA\_KEYGEN}}
@@ -677,7 +677,7 @@ Orchestre la génération complète d'une paire de clés RSA :
 \end{tabular}
 \end{table}
 
-\subsection{Machine d'états}
+\subsubsection{Machine d'états}
 \begin{enumerate}
   \item \textbf{IDLE} : attente.
   \item \textbf{ST\_GEN\_P / ST\_GEN\_P\_WAIT} : génération et attente de $p$.
@@ -691,7 +691,7 @@ Orchestre la génération complète d'une paire de clés RSA :
   \item \textbf{DONE\_ST} : fin.
 \end{enumerate}
 
-\subsection{Simulation}
+\subsubsection{Simulation}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
@@ -706,10 +706,10 @@ Orchestre la génération complète d'une paire de clés RSA :
 % ======================================================================
 %                  CHAPTER 5 : RSA_TOP (ENTITÉ PRINCIPALE)
 % ======================================================================
-\chapter{RSA\_TOP --- Entité Principale}
+\section{RSA\_TOP --- Entité Principale}
 \label{ch:top}
 
-\section{Fonction}
+\subsection{Fonction}
 
 \texttt{RSA\_TOP} est le point d'entrée unique du co-processeur. Il intègre
 \texttt{RSA\_KEYGEN} et \texttt{RSA} dans un seul bloc. L'utilisateur
@@ -723,7 +723,7 @@ ne fournit que :
 Tout le reste (génération de clés, sélection d'exposant, réduction modulaire)
 est géré en interne.
 
-\section{Interface externe}
+\subsection{Interface externe}
 \begin{table}[H]
 \centering
 \caption{Ports de \texttt{RSA\_TOP}}
@@ -745,7 +745,7 @@ est géré en interne.
 \end{tabular}
 \end{table}
 
-\section{Séquence d'opérations}
+\subsection{Séquence d'opérations}
 
 \begin{enumerate}
   \item \textbf{Après reset :} le FSM charge automatiquement la graine
@@ -761,7 +761,7 @@ est géré en interne.
 \end{enumerate}
 
 
-\section{Machine d'états principale}
+\subsection{Machine d'états principale}
 
 \begin{figure}[H]
 \centering
@@ -794,7 +794,7 @@ est géré en interne.
 \label{fig:fsm_top}
 \end{figure}
 
-\section{Simulation complète (round-trip)}
+\subsection{Simulation complète (round-trip)}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}
@@ -809,10 +809,10 @@ est géré en interne.
 % ======================================================================
 %                   CHAPTER 6 : RÉSULTATS DE SIMULATION
 % ======================================================================
-\chapter{Résultats de Simulation}
+\section{Résultats de Simulation}
 \label{ch:sim}
 
-\section{Environnement de simulation}
+\subsection{Environnement de simulation}
 \begin{itemize}
   \item \textbf{Outil :} ModelSim / Vivado Simulator / GHDL
         \textit{[à compléter]}
@@ -820,7 +820,7 @@ est géré en interne.
   \item \textbf{Testbench :} \texttt{TB\_RSA\_TOP.vhd}
 \end{itemize}
 
-\section{Scénarios de test}
+\subsection{Scénarios de test}
 
 Le testbench \texttt{TB\_RSA\_TOP} vérifie automatiquement le
 \textit{round-trip} : $\text{decrypt}(\text{encrypt}(m)) = m$.
@@ -839,7 +839,7 @@ Le testbench \texttt{TB\_RSA\_TOP} vérifie automatiquement le
 \end{tabular}
 \end{table}
 
-\section{Performance mesurée}
+\subsection{Performance mesurée}
 
 \begin{table}[H]
 \centering
@@ -860,7 +860,7 @@ Déchiffrement ($d \approx K$ bits, dense)       & $\sim 2\,100\,000$ \\
 est beaucoup plus rapide que le déchiffrement (exposant $d$ de 1024 bits
 avec $\sim 50\%$ de bits à 1).
 
-\section{Résultat global de simulation}
+\subsection{Résultat global de simulation}
 \begin{figure}[H]
 \centering
 \fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}
@@ -876,10 +876,10 @@ avec $\sim 50\%$ de bits à 1).
 % ======================================================================
 %                 CHAPTER 7 : INTÉGRATION RISC-V
 % ======================================================================
-\chapter{Intégration avec le Processeur RISC-V}
+\section{Intégration avec le Processeur RISC-V}
 \label{ch:riscv}
 
-\section{Principe d'intégration}
+\subsection{Principe d'intégration}
 
 Le co-processeur RSA est connecté au processeur RISC-V via un bus
 mémoire-mappé (AXI-Lite ou Wishbone). Le processeur écrit le message
@@ -904,7 +904,7 @@ dans un registre, lance l'opération, et lit le résultat une fois
 \label{fig:integration}
 \end{figure}
 
-\section{Registres mémoire-mappés (proposition)}
+\subsection{Registres mémoire-mappés (proposition)}
 
 \begin{table}[H]
 \centering
@@ -925,10 +925,10 @@ dans un registre, lance l'opération, et lit le résultat une fois
 % ======================================================================
 %                   CHAPTER 8 : CONCLUSION
 % ======================================================================
-\chapter{Conclusion et Perspectives}
+\section{Conclusion et Perspectives}
 \label{ch:conclusion}
 
-\section{Bilan}
+\subsection{Bilan}
 Ce projet a permis de concevoir et valider un co-processeur cryptographique
 RSA complet en VHDL, intégrant :
 \begin{itemize}
@@ -943,7 +943,7 @@ La simulation confirme le fonctionnement correct du round-trip
 $\text{decrypt}(\text{encrypt}(m)) = m$ pour plusieurs vecteurs de test.
 
 
-\section{Limites actuelles}
+\subsection{Limites actuelles}
 \begin{itemize}
   \item \textbf{Performance :} Le multiplieur bit-sériel traite un seul
         bit par cycle. Un déchiffrement RSA-1024 nécessite environ
@@ -958,7 +958,7 @@ $\text{decrypt}(\text{encrypt}(m)) = m$ pour plusieurs vecteurs de test.
         séquentiel pour la synthèse.
 \end{itemize}
 
-\section{Perspectives d'amélioration}
+\subsection{Perspectives d'amélioration}
 \begin{itemize}
   \item \textbf{Multiplieur radix-4/8 :} traiter 2--3 bits par cycle
         pour une accélération de $2\times$--$3\times$.
@@ -977,10 +977,9 @@ $\text{decrypt}(\text{encrypt}(m)) = m$ pour plusieurs vecteurs de test.
 % ======================================================================
 %                         ANNEXES
 % ======================================================================
-\appendix
-\chapter{Code VHDL --- Extraits}
+\section{Code VHDL --- Extraits}
 
-\section{MONTGOMERY\_MULT (complet)}
+\subsection{MONTGOMERY\_MULT (complet)}
 \begin{lstlisting}[style=vhdl, caption={MONTGOMERY\_MULT.vhd}]
 architecture rtl of MONTGOMERY_MULT is
   type state_t is (IDLE, RUN, DONE);
@@ -1020,7 +1019,7 @@ end rtl;
 \end{lstlisting}
 
 
-\section{RSA\_TOP --- Machine d'états (extrait)}
+\subsection{RSA\_TOP --- Machine d'états (extrait)}
 \begin{lstlisting}[style=vhdl, caption={FSM principale de RSA\_TOP}]
 case state is
   when S_SEED_LOAD =>
