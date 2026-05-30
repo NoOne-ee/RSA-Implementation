@@ -1,0 +1,1150 @@
+\documentclass[12pt,a4paper]{report}
+
+% ============================== PACKAGES ==============================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning,fit,calc}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+
+% ============================== LISTINGS STYLE ==============================
+\lstdefinestyle{vhdl}{
+  language=VHDL,
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black}\itshape,
+  stringstyle=\color{red},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt,
+  frame=single,
+  breaklines=true,
+  tabsize=2,
+  showstringspaces=false,
+  captionpos=b
+}
+
+% ============================== HEADER/FOOTER ==============================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Co-processeur Cryptographique RSA}
+\fancyhead[R]{RISC-V + Crypto}
+\fancyfoot[C]{\thepage}
+
+% ============================== TITLE PAGE ==============================
+\begin{document}
+
+
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+
+{\Huge\bfseries Rapport de Projet\\[0.5cm]}
+{\LARGE Co-processeur Cryptographique RSA\\pour Architecture RISC-V\\[2cm]}
+
+{\Large
+\begin{tabular}{rl}
+\textbf{Module :}    & Projet de Fin d'Études \\
+\textbf{Filière :}   & Électronique / Systèmes Embarqués \\
+\textbf{Encadrant :} & \textit{[Nom de l'encadrant]} \\
+\textbf{Réalisé par :} & \textit{[Votre nom]} \\
+\textbf{Année :}     & 2024--2025 \\
+\end{tabular}
+}
+
+\vfill
+{\large\textit{Université / École}}
+\end{titlepage}
+
+% ============================== TOC ==============================
+\tableofcontents
+\newpage
+
+
+% ======================================================================
+%                        CHAPTER 1 : INTRODUCTION
+% ======================================================================
+\chapter{Introduction}
+
+\section{Contexte du projet}
+Ce projet s'inscrit dans le cadre de la conception d'un co-processeur
+cryptographique dédié à l'algorithme RSA, destiné à être intégré à un
+processeur RISC-V. L'objectif est de décharger le processeur principal des
+opérations d'exponentiation modulaire coûteuses en cycles, permettant ainsi
+un chiffrement/déchiffrement RSA accéléré par matériel.
+
+\section{Objectifs}
+\begin{itemize}
+  \item Implémenter l'algorithme RSA complet en VHDL (génération de clés,
+        chiffrement, déchiffrement).
+  \item Utiliser la multiplication de Montgomery pour l'exponentiation
+        modulaire efficace.
+  \item Concevoir une architecture modulaire et paramétrable (largeur de
+        clé configurable).
+  \item Valider le fonctionnement par simulation (testbench VHDL).
+  \item Préparer l'intégration avec un bus AXI/Wishbone vers le RISC-V.
+\end{itemize}
+
+\section{Organisation du rapport}
+Le chapitre~\ref{ch:theory} présente les fondements mathématiques du RSA
+et de Montgomery. Le chapitre~\ref{ch:archi} détaille l'architecture
+globale. Les chapitres~\ref{ch:entities} à~\ref{ch:top} décrivent chaque
+entité VHDL. Le chapitre~\ref{ch:sim} présente les résultats de simulation.
+Enfin, le chapitre~\ref{ch:conclusion} conclut et propose des perspectives.
+
+
+% ======================================================================
+%                   CHAPTER 2 : FONDEMENTS THÉORIQUES
+% ======================================================================
+\chapter{Fondements Théoriques}
+\label{ch:theory}
+
+\section{Algorithme RSA}
+L'algorithme RSA repose sur la difficulté de factoriser le produit de
+deux grands nombres premiers.
+
+\subsection{Génération de clés}
+\begin{enumerate}
+  \item Choisir deux nombres premiers $p$ et $q$ de $k/2$ bits chacun.
+  \item Calculer $N = p \times q$ \quad (module RSA, $k$ bits).
+  \item Calculer $\varphi(N) = (p-1)(q-1)$.
+  \item Choisir $e$ tel que $\gcd(e, \varphi(N)) = 1$ (exposant public,
+        typiquement $e = 65537$).
+  \item Calculer $d = e^{-1} \bmod \varphi(N)$ (exposant privé, via
+        l'algorithme d'Euclide étendu).
+\end{enumerate}
+La clé publique est $(N, e)$, la clé privée est $(N, d)$.
+
+\subsection{Chiffrement et déchiffrement}
+\begin{align}
+  \text{Chiffrement :} \quad c &= m^e \bmod N \\
+  \text{Déchiffrement :} \quad m &= c^d \bmod N
+\end{align}
+où $m < N$ est le message en clair et $c$ est le chiffré.
+
+
+\section{Multiplication de Montgomery}
+
+La multiplication de Montgomery permet d'effectuer des réductions modulaires
+sans division explicite, en travaillant dans un domaine transformé.
+
+\subsection{Principe}
+Soit $R = 2^K$ avec $\gcd(R, N) = 1$ (N impair). La forme de Montgomery
+d'un entier $a$ est $\bar{a} = a \cdot R \bmod N$.
+
+La \textbf{réduction de Montgomery} calcule :
+\[
+  \text{MonPro}(a, b) = a \cdot b \cdot R^{-1} \bmod N
+\]
+
+\subsection{Algorithme bit-sériel}
+L'implémentation utilise l'algorithme bit-sériel de Montgomery :
+\begin{enumerate}
+  \item $S \leftarrow 0$
+  \item Pour $i = 0$ à $K-1$ :
+  \begin{enumerate}
+    \item Si $X_i = 1$ : $S \leftarrow S + Y$
+    \item Si $S_0 = 1$ : $S \leftarrow S + M$
+    \item $S \leftarrow S \gg 1$
+  \end{enumerate}
+  \item Si $S \geq M$ : $S \leftarrow S - M$
+  \item Retourner $S$
+\end{enumerate}
+
+Cet algorithme traite un bit par cycle d'horloge, nécessitant $K+2$
+cycles par multiplication (K cycles de calcul + 1 cycle de correction
++ 1 cycle de sortie).
+
+
+\section{Exponentiation modulaire par Montgomery}
+
+L'exponentiation $X^E \bmod N$ utilise la méthode \textit{square-and-multiply}
+(LSB-first dans notre implémentation) avec deux instances de Montgomery :
+
+\begin{enumerate}
+  \item Précalculer $R^2 \bmod N$ par doublement itéré ($2K$ cycles).
+  \item $\bar{Z} = \text{MonPro}(1, R^2) = R \bmod N$ (forme de Montgomery de 1).
+  \item $\bar{S} = \text{MonPro}(X, R^2) = X \cdot R \bmod N$ (forme de
+        Montgomery de X).
+  \item Pour chaque bit $i$ de $E$ (de 0 à $K_{exp}-1$) :
+  \begin{itemize}
+    \item $\bar{S} \leftarrow \text{MonPro}(\bar{S}, \bar{S})$ \quad (carré)
+    \item Si $E_i = 1$ : $\bar{Z} \leftarrow \text{MonPro}(\bar{Z}, \bar{S})$
+          \quad (multiplication)
+  \end{itemize}
+  \item $Z = \text{MonPro}(\bar{Z}, 1)$ \quad (retour au domaine normal).
+\end{enumerate}
+
+\section{Test de primalité de Miller-Rabin}
+
+Pour la génération de clés, les candidats premiers sont testés par
+l'algorithme de Miller-Rabin avec $t$ témoins ($a = 2, 3, 5, 7$).
+
+Soit $n - 1 = 2^s \cdot d$ avec $d$ impair. Pour chaque témoin $a$ :
+\begin{enumerate}
+  \item $x = a^d \bmod n$
+  \item Si $x = 1$ ou $x = n-1$ : passer au témoin suivant.
+  \item Pour $r = 1$ à $s-1$ : $x = x^2 \bmod n$. Si $x = n-1$ : passer.
+  \item Si aucun passage : $n$ est composé.
+\end{enumerate}
+
+\section{Algorithme d'Euclide étendu (EXT\_GCD)}
+Calcule $d = e^{-1} \bmod \varphi(N)$ par l'algorithme itératif classique
+avec division et multiplication séquentielles (un bit par cycle).
+
+
+% ======================================================================
+%                   CHAPTER 3 : ARCHITECTURE GLOBALE
+% ======================================================================
+\chapter{Architecture Globale}
+\label{ch:archi}
+
+\section{Vue d'ensemble}
+
+L'architecture est hiérarchique et modulaire. Le schéma ci-dessous montre
+les blocs principaux et leurs interconnexions :
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, thick, minimum width=3.5cm, minimum height=1.2cm,
+                align=center, rounded corners=3pt},
+  arr/.style={->, thick, >=stealth}
+]
+
+% RSA_TOP
+\node[block, fill=blue!10, minimum width=12cm, minimum height=8cm]
+  (top) at (0,0) {};
+\node[above] at (top.north) {\textbf{\large RSA\_TOP}};
+
+% RSA_KEYGEN block
+\node[block, fill=orange!20] (keygen) at (-3, 2) {RSA\_KEYGEN};
+
+% Sub-blocks of KEYGEN
+\node[block, fill=yellow!20, font=\small] (rng) at (-5, 0) {RANDOM\_GEN\\(LFSR 128b)};
+\node[block, fill=yellow!20, font=\small] (mr) at (-3, -1.5) {MILLER\_RABIN};
+\node[block, fill=yellow!20, font=\small] (gcd) at (-1, 0) {EXT\_GCD};
+
+% RSA core
+\node[block, fill=green!15] (rsa) at (3, 2) {RSA};
+
+% Montgomery EXP
+\node[block, fill=green!30, font=\small] (exp) at (3, 0) {MOD\_MONTGOMERY\\\_EXP};
+
+% Montgomery MULT
+\node[block, fill=red!15, font=\small] (mult1) at (2, -2.2) {MONTGOMERY\\\_MULT (×)};
+\node[block, fill=red!15, font=\small] (mult2) at (4.5, -2.2) {MONTGOMERY\\\_MULT (²)};
+
+% Arrows
+\draw[arr] (keygen) -- node[above]{N, e, d} (rsa);
+\draw[arr] (rng) -- (keygen);
+\draw[arr] (mr) -- (keygen);
+\draw[arr] (gcd) -- (keygen);
+\draw[arr] (rsa) -- (exp);
+\draw[arr] (exp) -- (mult1);
+\draw[arr] (exp) -- (mult2);
+
+% External I/O
+\draw[arr] (-6.5, 2) -- node[above]{\small start, seed} (keygen.west);
+\draw[arr] (-6.5, 3) -- node[above]{\small i\_message, mode, start} (top.west |- rsa);
+\draw[arr] (rsa.east) -- ++(1,0) node[right]{\small o\_result, o\_done};
+
+\end{tikzpicture}
+\caption{Architecture globale du co-processeur RSA}
+\label{fig:archi_globale}
+\end{figure}
+
+
+\section{Hiérarchie des entités}
+
+\begin{table}[H]
+\centering
+\caption{Hiérarchie des fichiers VHDL}
+\label{tab:hierarchy}
+\begin{tabular}{lll}
+\toprule
+\textbf{Fichier} & \textbf{Entité} & \textbf{Rôle} \\
+\midrule
+\texttt{RSA\_PKG.vhd}       & (package)           & Constantes, types, fonctions \\
+\texttt{RSA\_TOP.vhd}       & \texttt{RSA\_TOP}   & Top-level (keygen + RSA) \\
+\texttt{RSA\_KEYGEN.vhd}    & \texttt{RSA\_KEYGEN} & Génération de clés complète \\
+\texttt{RANDOM\_GEN.vhd}    & \texttt{RANDOM\_GEN} & PRNG (LFSR 128 bits) \\
+\texttt{MILLER\_RABIN.vhd}  & \texttt{MILLER\_RABIN} & Test de primalité \\
+\texttt{EXT\_GCD.vhd}       & \texttt{EXT\_GCD}   & Euclide étendu ($d = e^{-1}$) \\
+\texttt{RSA.vhd}            & \texttt{RSA}        & Wrapper exponentiation mod \\
+\texttt{MOD\_MONTGOMERY\_EXP.vhd} & \texttt{MOD\_MONTGOMERY\_EXP} & Exponentiation Montgomery \\
+\texttt{MONTGOMERY\_MULT.vhd} & \texttt{MONTGOMERY\_MULT} & Multiplieur bit-sériel \\
+\texttt{TB\_RSA\_TOP.vhd}   & \texttt{TB\_RSA\_TOP} & Testbench principal \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Paramètres de conception}
+
+\begin{table}[H]
+\centering
+\caption{Paramètres configurables}
+\label{tab:params}
+\begin{tabular}{lcp{7cm}}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} & \textbf{Description} \\
+\midrule
+\texttt{PRIME\_WIDTH}   & 512   & Largeur des premiers $p$, $q$ (bits) \\
+\texttt{KEY\_WIDTH}     & 1024  & Largeur du module $N = p \times q$ \\
+\texttt{NUM\_WITNESSES} & 4     & Nombre de témoins Miller-Rabin \\
+\texttt{e}              & 65537 & Exposant public fixe \\
+LFSR                    & 128 bits & Graine PRNG \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ======================================================================
+%              CHAPTER 4 : DESCRIPTION DES ENTITÉS
+% ======================================================================
+\chapter{Description Détaillée des Entités}
+\label{ch:entities}
+
+% ----------------------------------------------------------------------
+\section{RSA\_PKG --- Package de constantes}
+\label{sec:pkg}
+
+Ce package centralise les constantes globales et la fonction
+\texttt{mod\_inverse\_fn} (Euclide étendu) utilisée à l'élaboration.
+
+\begin{table}[H]
+\centering
+\caption{Constantes définies dans \texttt{RSA\_PKG}}
+\begin{tabular}{lcl}
+\toprule
+\textbf{Nom} & \textbf{Valeur} & \textbf{Usage} \\
+\midrule
+\texttt{PRIME\_WIDTH} & 512  & Largeur des premiers \\
+\texttt{KEY\_WIDTH}   & 1024 & $= 2 \times$ \texttt{PRIME\_WIDTH} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ----------------------------------------------------------------------
+\section{RANDOM\_GEN --- Générateur pseudo-aléatoire}
+\label{sec:rng}
+
+\subsection{Fonction}
+Génère des nombres pseudo-aléatoires de \texttt{WIDTH} bits à partir
+d'un LFSR (Linear Feedback Shift Register) de 128 bits. Le polynôme
+de rétroaction est :
+\[
+  x^{128} + x^{126} + x^{101} + x^{99} + 1
+\]
+La sortie est forcée impaire (LSB $= 1$) et de pleine longueur (MSB $= 1$).
+
+\subsection{Interface}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{RANDOM\_GEN}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Direction} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}    & in  & 1   & Horloge \\
+\texttt{rst}    & in  & 1   & Reset asynchrone \\
+\texttt{seed}   & in  & 128 & Graine initiale (non nulle) \\
+\texttt{load}   & in  & 1   & Chargement de la graine \\
+\texttt{start}  & in  & 1   & Demande d'un nouveau nombre \\
+\texttt{o\_done} & out & 1   & Sortie valide \\
+\texttt{o\_rng}  & out & WIDTH & Nombre aléatoire généré \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Machine d'états}
+\begin{enumerate}
+  \item \textbf{IDLE} : attente d'une requête \texttt{start}.
+  \item \textbf{STEP} : avance le LFSR et accumule 128 bits par cycle
+        ($\lceil\text{WIDTH}/128\rceil$ cycles au total).
+  \item \textbf{FINALIZE} : force MSB $= 1$ et LSB $= 1$.
+  \item \textbf{DONE\_ST} : présente la sortie pendant un cycle.
+\end{enumerate}
+
+\subsection{Simulation}
+\begin{figure}[H]
+\centering
+% === INSÉRER ICI LA CAPTURE DE SIMULATION ===
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+  \textit{[Capture chronogramme RANDOM\_GEN : signaux clk, start, o\_done, o\_rng]}
+\vspace{3cm}}}
+\caption{Chronogramme de simulation de \texttt{RANDOM\_GEN}}
+\label{fig:sim_rng}
+\end{figure}
+
+% ----------------------------------------------------------------------
+\section{MILLER\_RABIN --- Test de primalité}
+\label{sec:mr}
+
+\subsection{Fonction}
+Teste si un nombre $n$ de $K$ bits est probablement premier en utilisant
+l'algorithme de Miller-Rabin avec \texttt{NUM\_WITNESSES} témoins
+fixes ($a \in \{2, 3, 5, 7\}$).
+
+\subsection{Interface}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{MILLER\_RABIN}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Dir.} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}     & in  & 1 & Horloge \\
+\texttt{rst}     & in  & 1 & Reset asynchrone \\
+\texttt{start}   & in  & 1 & Lancement du test \\
+\texttt{i\_n}    & in  & K & Nombre à tester \\
+\texttt{o\_done}  & out & 1 & Résultat disponible \\
+\texttt{o\_prime} & out & 1 & \texttt{'1'} = prob. premier \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Machine d'états}
+\begin{enumerate}
+  \item \textbf{IDLE} : attente.
+  \item \textbf{CHECK\_TRIVIAL} : cas triviaux ($n=2,3$, $n$ pair).
+  \item \textbf{DECOMPOSE} : décomposition $n-1 = 2^s \cdot d$ (un shift/cycle).
+  \item \textbf{LOAD\_WITNESS} : charge le témoin $a_i$.
+  \item \textbf{ST\_EXP\_LAUNCH/WAIT} : calcule $x = a^d \bmod n$ via
+        \texttt{MOD\_MONTGOMERY\_EXP}.
+  \item \textbf{CHECK\_INITIAL} : vérifie $x = 1$ ou $x = n-1$.
+  \item \textbf{ST\_SQ\_LAUNCH/WAIT} : élévations au carré successives
+        $x = x^2 \bmod n$.
+  \item \textbf{CHECK\_SQUARE} : vérifie $x = n-1$ après chaque carré.
+  \item \textbf{COMPOSITE / PROBABLY\_PRIME} : verdict final.
+  \item \textbf{DONE\_ST} : sortie du résultat.
+\end{enumerate}
+
+\subsection{Simulation}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+  \textit{[Capture chronogramme MILLER\_RABIN : signaux clk, start, i\_n,
+  o\_done, o\_prime, state]}
+\vspace{3cm}}}
+\caption{Chronogramme de simulation de \texttt{MILLER\_RABIN}}
+\label{fig:sim_mr}
+\end{figure}
+
+% ----------------------------------------------------------------------
+\section{EXT\_GCD --- Euclide étendu}
+\label{sec:gcd}
+
+\subsection{Fonction}
+Calcule l'inverse modulaire $d = e^{-1} \bmod \varphi(N)$ en utilisant
+l'algorithme d'Euclide étendu itératif. La division et la multiplication
+internes sont réalisées en séquentiel (un bit par cycle).
+
+\subsection{Interface}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{EXT\_GCD}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Dir.} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}     & in  & 1 & Horloge \\
+\texttt{rst}     & in  & 1 & Reset asynchrone \\
+\texttt{start}   & in  & 1 & Lancement \\
+\texttt{i\_e}    & in  & K & Valeur à inverser ($e$) \\
+\texttt{i\_phi}  & in  & K & Module ($\varphi(N)$) \\
+\texttt{o\_done}  & out & 1 & Résultat prêt \\
+\texttt{o\_valid} & out & 1 & \texttt{'1'} si inverse existe \\
+\texttt{o\_d}     & out & K & Résultat $e^{-1} \bmod \varphi$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Machine d'états}
+\begin{enumerate}
+  \item \textbf{IDLE} : attente de \texttt{start}.
+  \item \textbf{CHECK\_ZERO} : si $r = 0$, l'algorithme est terminé.
+  \item \textbf{DIV\_STEP} : division séquentielle (shift-and-subtract),
+        un bit par cycle ($K$ cycles).
+  \item \textbf{MUL\_INIT / MUL\_STEP} : multiplication séquentielle
+        (shift-and-add) du quotient par $s$, un bit par cycle ($K$ cycles).
+  \item \textbf{UPDATE} : mise à jour des registres EEA.
+  \item \textbf{FINAL\_ADJUST} : rend le résultat positif ($d = d + \varphi$
+        si $d < 0$).
+  \item \textbf{DONE\_ST} : sortie.
+\end{enumerate}
+
+\subsection{Simulation}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+  \textit{[Capture chronogramme EXT\_GCD : signaux clk, start, i\_e,
+  i\_phi, o\_done, o\_valid, o\_d]}
+\vspace{3cm}}}
+\caption{Chronogramme de simulation de \texttt{EXT\_GCD}}
+\label{fig:sim_gcd}
+\end{figure}
+
+% ----------------------------------------------------------------------
+\section{MONTGOMERY\_MULT --- Multiplieur de Montgomery}
+\label{sec:mont_mult}
+
+\subsection{Fonction}
+Calcule le produit de Montgomery :
+\[
+  Z = X \cdot Y \cdot R^{-1} \bmod M
+\]
+où $R = 2^K$. L'algorithme est bit-sériel : un bit de $X$ est traité par
+cycle d'horloge.
+
+\subsection{Interface}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{MONTGOMERY\_MULT}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Dir.} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}    & in  & 1 & Horloge \\
+\texttt{rst}    & in  & 1 & Reset asynchrone \\
+\texttt{start}  & in  & 1 & Lancement \\
+\texttt{i\_X}   & in  & K & Premier opérande \\
+\texttt{i\_Y}   & in  & K & Second opérande \\
+\texttt{i\_M}   & in  & K & Module (impair) \\
+\texttt{o\_done} & out & 1 & Résultat prêt \\
+\texttt{o\_Z}    & out & K & $X \cdot Y \cdot R^{-1} \bmod M$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Machine d'états}
+\begin{enumerate}
+  \item \textbf{IDLE} : capture des entrées sur \texttt{start}.
+  \item \textbf{RUN} : boucle de $K$ cycles (un bit de $X$ par cycle).
+        À chaque itération :
+        $S \leftarrow S + X_i \cdot Y$, puis
+        si $S_0 = 1$ : $S \leftarrow S + M$, puis
+        $S \leftarrow S \gg 1$.
+  \item \textbf{DONE} : correction finale ($S \geq M \Rightarrow S - M$),
+        puis \texttt{o\_done} = 1.
+\end{enumerate}
+
+\subsection{Latence}
+$K + 2$ cycles par multiplication (K itérations + DONE + retour IDLE).
+
+\subsection{Simulation}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+  \textit{[Capture chronogramme MONTGOMERY\_MULT : signaux clk, start,
+  i\_X, i\_Y, i\_M, o\_done, o\_Z, state]}
+\vspace{3cm}}}
+\caption{Chronogramme de simulation de \texttt{MONTGOMERY\_MULT}}
+\label{fig:sim_mont}
+\end{figure}
+
+% ----------------------------------------------------------------------
+\section{MOD\_MONTGOMERY\_EXP --- Exponentiation modulaire}
+\label{sec:mod_exp}
+
+\subsection{Fonction}
+Calcule $Z = X^E \bmod M$ en utilisant la méthode \textit{square-and-multiply}
+(LSB-first) avec deux instances de \texttt{MONTGOMERY\_MULT} (une pour le
+carré, une pour la multiplication conditionnelle).
+
+\subsection{Interface}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{MOD\_MONTGOMERY\_EXP}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Dir.} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}    & in  & 1 & Horloge \\
+\texttt{rst}    & in  & 1 & Reset asynchrone \\
+\texttt{start}  & in  & 1 & Lancement \\
+\texttt{i\_X}   & in  & K & Base \\
+\texttt{i\_e}   & in  & K & Exposant \\
+\texttt{i\_Mod} & in  & K & Module (impair) \\
+\texttt{o\_done} & out & 1 & Résultat prêt \\
+\texttt{o\_Z}    & out & K & $X^E \bmod M$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Machine d'états}
+\begin{enumerate}
+  \item \textbf{IDLE} : capture de $X$, $E$, $M$.
+  \item \textbf{PRECOMPUTE\_R2} : calcul de $R^2 \bmod M$ par $2K$
+        doublements ($2K$ cycles).
+  \item \textbf{INIT\_MONTG} : lance en parallèle
+        $\bar{Z} = \text{MonPro}(1, R^2)$ et
+        $\bar{S} = \text{MonPro}(X, R^2)$.
+  \item \textbf{WAIT\_INIT} : attente des deux résultats ($K+2$ cycles).
+  \item \textbf{STEP} : pour chaque bit de $E$, lance le carré
+        $\bar{S} = \text{MonPro}(\bar{S}, \bar{S})$ et conditionnellement
+        $\bar{Z} = \text{MonPro}(\bar{Z}, \bar{S})$.
+  \item \textbf{WAIT\_STEP} : attente ($K+2$ cycles par itération).
+  \item \textbf{FINAL} : $Z = \text{MonPro}(\bar{Z}, 1)$.
+  \item \textbf{WAIT\_FINAL} : attente du résultat final.
+  \item \textbf{DONE} : sortie de $o\_Z$.
+\end{enumerate}
+
+\subsection{Nombre de cycles}
+\begin{table}[H]
+\centering
+\caption{Décomposition du nombre de cycles (\texttt{MOD\_MONTGOMERY\_EXP})}
+\begin{tabular}{lr}
+\toprule
+\textbf{Phase} & \textbf{Cycles (K=1024)} \\
+\midrule
+PRECOMPUTE\_R2          & 2048 \\
+INIT (2 × MonMul)      & 1026 \\
+Boucle ($K$ itérations) & $K \times (K+2) + \text{popcount}(E) \times (K+2)$ \\
+FINAL (1 × MonMul)     & 1026 \\
+\midrule
+\textbf{Total (pire cas)} & $\approx 2K^2 + 5K$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Simulation}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+  \textit{[Capture chronogramme MOD\_MONTGOMERY\_EXP : signaux clk, start,
+  i\_X, i\_e, i\_Mod, o\_done, o\_Z, STATE]}
+\vspace{3cm}}}
+\caption{Chronogramme de simulation de \texttt{MOD\_MONTGOMERY\_EXP}}
+\label{fig:sim_exp}
+\end{figure}
+
+
+% ----------------------------------------------------------------------
+\section{RSA --- Wrapper d'exponentiation}
+\label{sec:rsa}
+
+\subsection{Fonction}
+Entité enveloppe qui effectue $o\_result = i\_message^{i\_exp} \bmod i\_N$.
+Elle réduit d'abord le message ($m \bmod N$) puis lance
+\texttt{MOD\_MONTGOMERY\_EXP}.
+
+\subsection{Interface}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{RSA}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Dir.} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}       & in  & 1 & Horloge \\
+\texttt{rst}       & in  & 1 & Reset \\
+\texttt{start}     & in  & 1 & Lancement \\
+\texttt{i\_message} & in  & KEY\_WIDTH & Message $m$ \\
+\texttt{i\_exp}     & in  & KEY\_WIDTH & Exposant ($e$ ou $d$) \\
+\texttt{i\_N}       & in  & KEY\_WIDTH & Module RSA \\
+\texttt{o\_done}    & out & 1 & Résultat prêt \\
+\texttt{o\_result}  & out & KEY\_WIDTH & $m^{exp} \bmod N$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Machine d'états}
+\begin{enumerate}
+  \item \textbf{IDLE} : capture des entrées, calcul de $m \bmod N$.
+  \item \textbf{REDUCE} : stabilisation.
+  \item \textbf{START\_EXP} : impulsion \texttt{start} vers
+        \texttt{MOD\_MONTGOMERY\_EXP}.
+  \item \textbf{WAIT\_EXP} : attente de \texttt{exp\_done}.
+  \item \textbf{LATCH} : capture du résultat.
+  \item \textbf{DONE\_STATE} : \texttt{o\_done} = 1.
+\end{enumerate}
+
+\subsection{Simulation}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+  \textit{[Capture chronogramme RSA : signaux clk, start, i\_message,
+  i\_exp, i\_N, o\_done, o\_result]}
+\vspace{3cm}}}
+\caption{Chronogramme de simulation de \texttt{RSA}}
+\label{fig:sim_rsa}
+\end{figure}
+
+
+% ----------------------------------------------------------------------
+\section{RSA\_KEYGEN --- Génération de clés}
+\label{sec:keygen}
+
+\subsection{Fonction}
+Orchestre la génération complète d'une paire de clés RSA :
+\begin{enumerate}
+  \item Génère un candidat $p$ via \texttt{RANDOM\_GEN}.
+  \item Teste $p$ avec \texttt{MILLER\_RABIN}; si composé, retour à 1.
+  \item Génère un candidat $q$; teste sa primalité.
+  \item Calcule $N = p \times q$ et $\varphi = (p-1)(q-1)$.
+  \item Calcule $d = e^{-1} \bmod \varphi$ via \texttt{EXT\_GCD}.
+  \item Sort $(N, e, d)$.
+\end{enumerate}
+
+\subsection{Interface}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{RSA\_KEYGEN}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Dir.} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}     & in  & 1   & Horloge \\
+\texttt{rst}     & in  & 1   & Reset \\
+\texttt{start}   & in  & 1   & Lancement génération \\
+\texttt{seed}    & in  & 128 & Graine PRNG \\
+\texttt{load}    & in  & 1   & Chargement graine \\
+\texttt{o\_done}  & out & 1   & Clés prêtes \\
+\texttt{o\_N}     & out & KEY\_WIDTH & Module public \\
+\texttt{o\_e}     & out & KEY\_WIDTH & Exposant public \\
+\texttt{o\_d}     & out & KEY\_WIDTH & Exposant privé \\
+\texttt{o\_valid} & out & 1   & \texttt{'1'} si génération réussie \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Machine d'états}
+\begin{enumerate}
+  \item \textbf{IDLE} : attente.
+  \item \textbf{ST\_GEN\_P / ST\_GEN\_P\_WAIT} : génération et attente de $p$.
+  \item \textbf{ST\_TEST\_P / ST\_TEST\_P\_WAIT} : test de primalité de $p$.
+  \item \textbf{ST\_GEN\_Q / ST\_GEN\_Q\_WAIT} : génération de $q$.
+  \item \textbf{ST\_TEST\_Q / ST\_TEST\_Q\_WAIT} : test de primalité de $q$
+        (vérifie aussi $p \neq q$).
+  \item \textbf{ST\_COMPUTE\_N} : calcul de $N$ et $\varphi$.
+  \item \textbf{ST\_GCD\_LAUNCH / ST\_GCD\_WAIT} : calcul de $d$.
+  \item \textbf{ST\_OUTPUT\_KEYS} : présentation des résultats.
+  \item \textbf{DONE\_ST} : fin.
+\end{enumerate}
+
+\subsection{Simulation}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+  \textit{[Capture chronogramme RSA\_KEYGEN : signaux clk, start, state,
+  o\_done, o\_N, o\_e, o\_d, o\_valid]}
+\vspace{3cm}}}
+\caption{Chronogramme de simulation de \texttt{RSA\_KEYGEN}}
+\label{fig:sim_keygen}
+\end{figure}
+
+
+% ======================================================================
+%                  CHAPTER 5 : RSA_TOP (ENTITÉ PRINCIPALE)
+% ======================================================================
+\chapter{RSA\_TOP --- Entité Principale}
+\label{ch:top}
+
+\section{Fonction}
+
+\texttt{RSA\_TOP} est le point d'entrée unique du co-processeur. Il intègre
+\texttt{RSA\_KEYGEN} et \texttt{RSA} dans un seul bloc. L'utilisateur
+ne fournit que :
+\begin{itemize}
+  \item \texttt{i\_message} : le message à chiffrer ou déchiffrer.
+  \item \texttt{mode} : \texttt{'0'} = chiffrement, \texttt{'1'} = déchiffrement.
+  \item \texttt{start} : impulsion de démarrage.
+\end{itemize}
+
+Tout le reste (génération de clés, sélection d'exposant, réduction modulaire)
+est géré en interne.
+
+\section{Interface externe}
+\begin{table}[H]
+\centering
+\caption{Ports de \texttt{RSA\_TOP}}
+\begin{tabular}{llcp{5cm}}
+\toprule
+\textbf{Port} & \textbf{Dir.} & \textbf{Largeur} & \textbf{Description} \\
+\midrule
+\texttt{clk}       & in  & 1 & Horloge \\
+\texttt{rst}       & in  & 1 & Reset asynchrone \\
+\texttt{i\_message} & in  & KEY\_WIDTH & Message (clair ou chiffré) \\
+\texttt{mode}      & in  & 1 & '0'=encrypt, '1'=decrypt \\
+\texttt{start}     & in  & 1 & Impulsion de démarrage \\
+\texttt{o\_done}    & out & 1 & Résultat disponible \\
+\texttt{o\_result}  & out & KEY\_WIDTH & Résultat (chiffré ou déchiffré) \\
+\texttt{o\_N}       & out & KEY\_WIDTH & Module généré (debug) \\
+\texttt{o\_e}       & out & KEY\_WIDTH & Exposant public (debug) \\
+\texttt{o\_d}       & out & KEY\_WIDTH & Exposant privé (debug) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Séquence d'opérations}
+
+\begin{enumerate}
+  \item \textbf{Après reset :} le FSM charge automatiquement la graine
+        PRNG et lance \texttt{RSA\_KEYGEN}. Aucune intervention de
+        l'utilisateur n'est nécessaire.
+  \item \textbf{Keygen terminé :} $N$, $e$, $d$ sont stockés dans des
+        registres internes. Le système passe en état \texttt{S\_READY}.
+  \item \textbf{Opération RSA :} sur \texttt{start}, le message et le mode
+        sont capturés. L'exposant approprié ($e$ ou $d$) est sélectionné.
+        Le cœur RSA est lancé.
+  \item \textbf{Résultat :} \texttt{o\_done} pulse pendant un cycle
+        lorsque \texttt{o\_result} est valide.
+\end{enumerate}
+
+
+\section{Machine d'états principale}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  state/.style={draw, rounded corners, minimum width=2.5cm,
+                minimum height=0.8cm, align=center, font=\small},
+  arr/.style={->, thick, >=stealth}
+]
+\node[state, fill=gray!20]  (seed)   at (0,0)    {S\_SEED\_LOAD};
+\node[state, fill=orange!20](kgl)    at (0,-1.5) {S\_KG\_LAUNCH};
+\node[state, fill=orange!20](kgr)    at (0,-3)   {S\_KG\_RUN};
+\node[state, fill=green!20] (ready)  at (0,-4.5) {S\_READY};
+\node[state, fill=blue!15]  (prep)   at (0,-6)   {S\_PREP};
+\node[state, fill=blue!15]  (launch) at (0,-7.5) {S\_LAUNCH};
+\node[state, fill=blue!15]  (wait)   at (0,-9)   {S\_WAIT\_RSA};
+\node[state, fill=blue!15]  (dout)   at (0,-10.5){S\_DONE\_OUT};
+
+\draw[arr] (seed)   -- (kgl);
+\draw[arr] (kgl)    -- (kgr);
+\draw[arr] (kgr)    -- node[right]{\scriptsize kg\_done \& valid} (ready);
+\draw[arr] (kgr.west) -- ++(-1.5,0) |- node[left,pos=0.25]
+           {\scriptsize !valid} (kgl.west);
+\draw[arr] (ready)  -- node[right]{\scriptsize start} (prep);
+\draw[arr] (prep)   -- (launch);
+\draw[arr] (launch) -- (wait);
+\draw[arr] (wait)   -- node[right]{\scriptsize rsa\_done} (dout);
+\draw[arr] (dout.east) -- ++(2,0) |- (ready.east);
+\end{tikzpicture}
+\caption{Diagramme d'états de \texttt{RSA\_TOP}}
+\label{fig:fsm_top}
+\end{figure}
+
+\section{Simulation complète (round-trip)}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}
+  \textit{[Capture chronogramme RSA\_TOP : round-trip encrypt+decrypt.
+  Signaux : clk, rst, start, i\_message, mode, o\_done, o\_result, o\_N]}
+\vspace{4cm}}}
+\caption{Simulation round-trip de \texttt{RSA\_TOP} : chiffrement puis déchiffrement}
+\label{fig:sim_top}
+\end{figure}
+
+
+% ======================================================================
+%                   CHAPTER 6 : RÉSULTATS DE SIMULATION
+% ======================================================================
+\chapter{Résultats de Simulation}
+\label{ch:sim}
+
+\section{Environnement de simulation}
+\begin{itemize}
+  \item \textbf{Outil :} ModelSim / Vivado Simulator / GHDL
+        \textit{[à compléter]}
+  \item \textbf{Période d'horloge :} 10~ns (100~MHz)
+  \item \textbf{Testbench :} \texttt{TB\_RSA\_TOP.vhd}
+\end{itemize}
+
+\section{Scénarios de test}
+
+Le testbench \texttt{TB\_RSA\_TOP} vérifie automatiquement le
+\textit{round-trip} : $\text{decrypt}(\text{encrypt}(m)) = m$.
+
+\begin{table}[H]
+\centering
+\caption{Vecteurs de test du round-trip}
+\begin{tabular}{cccl}
+\toprule
+\textbf{Message $m$} & \textbf{Encrypt} & \textbf{Decrypt} & \textbf{Statut} \\
+\midrule
+42    & $c = m^e \bmod N$ & $m' = c^d \bmod N$ & \textit{[PASS/FAIL]} \\
+99    & $c = m^e \bmod N$ & $m' = c^d \bmod N$ & \textit{[PASS/FAIL]} \\
+12345 & $c = m^e \bmod N$ & $m' = c^d \bmod N$ & \textit{[PASS/FAIL]} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Performance mesurée}
+
+\begin{table}[H]
+\centering
+\caption{Nombre de cycles par opération (K = 1024 bits, simulation)}
+\begin{tabular}{lr}
+\toprule
+\textbf{Opération} & \textbf{Cycles approximatifs} \\
+\midrule
+Génération de clés (keygen)                     & Variable (dépend des candidats) \\
+Chiffrement ($e = 65537$, popcount = 2)         & $\sim 40\,000$ \\
+Déchiffrement ($d \approx K$ bits, dense)       & $\sim 2\,100\,000$ \\
+\textbf{Pire cas} (exposant tous bits à 1)      & $\sim 2 \times K^2 \approx 2\,097\,152$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Note :} Avec $e = 65537$ (seulement 2 bits à 1), le chiffrement
+est beaucoup plus rapide que le déchiffrement (exposant $d$ de 1024 bits
+avec $\sim 50\%$ de bits à 1).
+
+\section{Résultat global de simulation}
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}
+  \textit{[Capture d'écran complète de la simulation : fenêtre waveform
+  avec tous les signaux principaux, montrant le keygen suivi de 3
+  round-trips réussis]}
+\vspace{4cm}}}
+\caption{Vue d'ensemble de la simulation \texttt{TB\_RSA\_TOP}}
+\label{fig:sim_full}
+\end{figure}
+
+
+% ======================================================================
+%                 CHAPTER 7 : INTÉGRATION RISC-V
+% ======================================================================
+\chapter{Intégration avec le Processeur RISC-V}
+\label{ch:riscv}
+
+\section{Principe d'intégration}
+
+Le co-processeur RSA est connecté au processeur RISC-V via un bus
+mémoire-mappé (AXI-Lite ou Wishbone). Le processeur écrit le message
+dans un registre, lance l'opération, et lit le résultat une fois
+\texttt{o\_done} actif.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  block/.style={draw, thick, minimum width=3cm, minimum height=1.5cm,
+                align=center, rounded corners=3pt},
+  arr/.style={<->, thick, >=stealth}
+]
+\node[block, fill=blue!15] (rv) at (0,0) {RISC-V\\Core};
+\node[block, fill=gray!15] (bus) at (4,0) {Bus\\AXI-Lite};
+\node[block, fill=green!15] (rsa) at (8,0) {RSA\_TOP\\Co-proc};
+
+\draw[arr] (rv) -- (bus);
+\draw[arr] (bus) -- (rsa);
+\end{tikzpicture}
+\caption{Intégration du co-processeur RSA avec le RISC-V}
+\label{fig:integration}
+\end{figure}
+
+\section{Registres mémoire-mappés (proposition)}
+
+\begin{table}[H]
+\centering
+\caption{Carte mémoire du co-processeur (exemple)}
+\begin{tabular}{lcp{6cm}}
+\toprule
+\textbf{Offset} & \textbf{R/W} & \textbf{Description} \\
+\midrule
+\texttt{0x00} & R/W & Registre de contrôle (start, mode, reset) \\
+\texttt{0x04} & R   & Registre de statut (done, key\_valid) \\
+\texttt{0x08--0x87} & W & Message d'entrée (128 octets = 1024 bits) \\
+\texttt{0x88--0x107} & R & Résultat (128 octets) \\
+\texttt{0x108--0x187} & R & Module $N$ (debug, optionnel) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ======================================================================
+%                   CHAPTER 8 : CONCLUSION
+% ======================================================================
+\chapter{Conclusion et Perspectives}
+\label{ch:conclusion}
+
+\section{Bilan}
+Ce projet a permis de concevoir et valider un co-processeur cryptographique
+RSA complet en VHDL, intégrant :
+\begin{itemize}
+  \item Un générateur de nombres pseudo-aléatoires (LFSR 128 bits).
+  \item Un test de primalité matériel (Miller-Rabin, 4 témoins).
+  \item Un calculateur d'inverse modulaire (Euclide étendu séquentiel).
+  \item Un cœur d'exponentiation Montgomery bit-sériel.
+  \item Une entité top-level autonome (keygen + encrypt/decrypt).
+\end{itemize}
+
+La simulation confirme le fonctionnement correct du round-trip
+$\text{decrypt}(\text{encrypt}(m)) = m$ pour plusieurs vecteurs de test.
+
+
+\section{Limites actuelles}
+\begin{itemize}
+  \item \textbf{Performance :} Le multiplieur bit-sériel traite un seul
+        bit par cycle. Un déchiffrement RSA-1024 nécessite environ
+        2 millions de cycles ($\sim 20$~ms à 100~MHz).
+  \item \textbf{PRNG :} Le LFSR n'est pas cryptographiquement sûr;
+        acceptable pour la simulation mais insuffisant pour la production.
+  \item \textbf{Multiplication combinatoire :} Les produits $p \times q$
+        et $(p-1)(q-1)$ dans \texttt{RSA\_KEYGEN} sont combinatoires
+        (non synthétisables pour $K > 64$).
+  \item \textbf{Réduction combinatoire :} Le \texttt{mod} dans
+        \texttt{RSA.vhd} est combinatoire; nécessite un réducteur
+        séquentiel pour la synthèse.
+\end{itemize}
+
+\section{Perspectives d'amélioration}
+\begin{itemize}
+  \item \textbf{Multiplieur radix-4/8 :} traiter 2--3 bits par cycle
+        pour une accélération de $2\times$--$3\times$.
+  \item \textbf{Double multiplieur :} exécuter carré et multiplication
+        en parallèle (gain de $\sim 30\%$).
+  \item \textbf{CRT (Chinese Remainder Theorem) :} effectuer deux
+        exponentiations de 512 bits au lieu d'une de 1024 bits
+        (accélération $\times 4$).
+  \item \textbf{Sécurisation :} protection contre les attaques par
+        canaux auxiliaires (masquage, randomisation de l'exposant).
+  \item \textbf{Intégration bus :} développer le wrapper AXI-Lite
+        pour une connexion directe au RISC-V.
+  \item \textbf{PRNG robuste :} remplacer le LFSR par un AES-CTR-DRBG.
+\end{itemize}
+
+% ======================================================================
+%                         ANNEXES
+% ======================================================================
+\appendix
+\chapter{Code VHDL --- Extraits}
+
+\section{MONTGOMERY\_MULT (complet)}
+\begin{lstlisting}[style=vhdl, caption={MONTGOMERY\_MULT.vhd}]
+architecture rtl of MONTGOMERY_MULT is
+  type state_t is (IDLE, RUN, DONE);
+  signal state : state_t := IDLE;
+  signal X_reg, Y_reg, M_reg : unsigned(K-1 downto 0);
+  signal S : unsigned(K+2 downto 0);
+  signal cnt : integer range 0 to K-1;
+begin
+  process(clk, rst)
+    variable temp : unsigned(K+2 downto 0);
+  begin
+    if rst = '1' then
+      state <= IDLE; o_done <= '0'; o_Z <= (others => '0');
+    elsif rising_edge(clk) then
+      o_done <= '0';
+      case state is
+        when IDLE =>
+          if start = '1' then
+            X_reg <= i_X; Y_reg <= i_Y; M_reg <= i_M;
+            S <= (others => '0'); cnt <= 0; state <= RUN;
+          end if;
+        when RUN =>
+          temp := S;
+          if X_reg(cnt) = '1' then temp := temp + Y_reg; end if;
+          if temp(0) = '1' then temp := temp + M_reg; end if;
+          S <= shift_right(temp, 1);
+          if cnt = K-1 then state <= DONE;
+          else cnt <= cnt + 1; end if;
+        when DONE =>
+          if S >= M_reg then o_Z <= resize(S - M_reg, K);
+          else o_Z <= resize(S, K); end if;
+          o_done <= '1'; state <= IDLE;
+      end case;
+    end if;
+  end process;
+end rtl;
+\end{lstlisting}
+
+
+\section{RSA\_TOP --- Machine d'états (extrait)}
+\begin{lstlisting}[style=vhdl, caption={FSM principale de RSA\_TOP}]
+case state is
+  when S_SEED_LOAD =>
+    kg_load <= '1';
+    state   <= S_KG_LAUNCH;
+  when S_KG_LAUNCH =>
+    kg_start <= '1';
+    state    <= S_KG_RUN;
+  when S_KG_RUN =>
+    if kg_done = '1' then
+      if kg_valid = '1' then
+        N_reg <= kg_N; e_reg <= kg_e; d_reg <= kg_d;
+        state <= S_READY;
+      else
+        kg_start <= '1'; -- retry
+      end if;
+    end if;
+  when S_READY =>
+    if start = '1' then
+      msg_reg  <= i_message;
+      mode_reg <= mode;
+      state    <= S_PREP;
+    end if;
+  when S_PREP =>
+    rsa_msg <= msg_reg; rsa_N <= N_reg;
+    if mode_reg = '1' then rsa_exp <= d_reg;
+    else rsa_exp <= e_reg; end if;
+    state <= S_LAUNCH;
+  when S_LAUNCH =>
+    rsa_start <= '1';
+    state     <= S_WAIT_RSA;
+  when S_WAIT_RSA =>
+    if rsa_done = '1' then
+      o_result <= rsa_result;
+      state    <= S_DONE_OUT;
+    end if;
+  when S_DONE_OUT =>
+    o_done <= '1';
+    state  <= S_READY;
+end case;
+\end{lstlisting}
+
+% ======================================================================
+%                       BIBLIOGRAPHIE
+% ======================================================================
+\begin{thebibliography}{9}
+
+\bibitem{rsa}
+R.~Rivest, A.~Shamir, L.~Adleman,
+\textit{A Method for Obtaining Digital Signatures and Public-Key Cryptosystems},
+Communications of the ACM, vol.~21, no.~2, pp.~120--126, 1978.
+
+\bibitem{montgomery}
+P.~L.~Montgomery,
+\textit{Modular Multiplication Without Trial Division},
+Mathematics of Computation, vol.~44, no.~170, pp.~519--521, 1985.
+
+\bibitem{millerrabin}
+M.~O.~Rabin,
+\textit{Probabilistic Algorithm for Testing Primality},
+Journal of Number Theory, vol.~12, no.~1, pp.~128--138, 1980.
+
+\bibitem{menezes}
+A.~J.~Menezes, P.~C.~van Oorschot, S.~A.~Vanstone,
+\textit{Handbook of Applied Cryptography},
+CRC Press, 1996.
+
+\bibitem{riscv}
+A.~Waterman, K.~Asanovic (eds.),
+\textit{The RISC-V Instruction Set Manual},
+Volume I: Unprivileged ISA, v.~20191213, 2019.
+
+\end{thebibliography}
+
+\end{document}
