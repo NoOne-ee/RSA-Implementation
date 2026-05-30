@@ -50,64 +50,6 @@
 \begin{document}
 
 
-\begin{titlepage}
-\centering
-\vspace*{2cm}
-
-{\Huge\bfseries Rapport de Projet\\[0.5cm]}
-{\LARGE Co-processeur Cryptographique RSA\\pour Architecture RISC-V\\[2cm]}
-
-{\Large
-\begin{tabular}{rl}
-\textbf{Module :}    & Projet de Fin d'Études \\
-\textbf{Filière :}   & Électronique / Systèmes Embarqués \\
-\textbf{Encadrant :} & \textit{[Nom de l'encadrant]} \\
-\textbf{Réalisé par :} & \textit{[Votre nom]} \\
-\textbf{Année :}     & 2024--2025 \\
-\end{tabular}
-}
-
-\vfill
-{\large\textit{Université / École}}
-\end{titlepage}
-
-% ============================== TOC ==============================
-\tableofcontents
-\newpage
-
-
-% ======================================================================
-%                        CHAPTER 1 : INTRODUCTION
-% ======================================================================
-\chapter{Introduction}
-
-\section{Contexte du projet}
-Ce projet s'inscrit dans le cadre de la conception d'un co-processeur
-cryptographique dédié à l'algorithme RSA, destiné à être intégré à un
-processeur RISC-V. L'objectif est de décharger le processeur principal des
-opérations d'exponentiation modulaire coûteuses en cycles, permettant ainsi
-un chiffrement/déchiffrement RSA accéléré par matériel.
-
-\section{Objectifs}
-\begin{itemize}
-  \item Implémenter l'algorithme RSA complet en VHDL (génération de clés,
-        chiffrement, déchiffrement).
-  \item Utiliser la multiplication de Montgomery pour l'exponentiation
-        modulaire efficace.
-  \item Concevoir une architecture modulaire et paramétrable (largeur de
-        clé configurable).
-  \item Valider le fonctionnement par simulation (testbench VHDL).
-  \item Préparer l'intégration avec un bus AXI/Wishbone vers le RISC-V.
-\end{itemize}
-
-\section{Organisation du rapport}
-Le chapitre~\ref{ch:theory} présente les fondements mathématiques du RSA
-et de Montgomery. Le chapitre~\ref{ch:archi} détaille l'architecture
-globale. Les chapitres~\ref{ch:entities} à~\ref{ch:top} décrivent chaque
-entité VHDL. Le chapitre~\ref{ch:sim} présente les résultats de simulation.
-Enfin, le chapitre~\ref{ch:conclusion} conclut et propose des perspectives.
-
-
 % ======================================================================
 %                   CHAPTER 2 : FONDEMENTS THÉORIQUES
 % ======================================================================
