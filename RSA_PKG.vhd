@@ -12,9 +12,16 @@ use ieee.numeric_std.all;
 
 package RSA_PKG is
 
-  constant NUM_MODULI : positive := 4;
-  constant MOD_WIDTH  : positive := 32;
-  constant INT_WIDTH  : positive := 1024;
+  constant NUM_MODULI  : positive := 4;
+  constant MOD_WIDTH   : positive := 32;
+  constant INT_WIDTH   : positive := 1024;
+
+  -- =====================================================================
+  -- PRIME_WIDTH: bit width of the primes p, q used by RSA_KEYGEN/RSA/RSA_TOP.
+  -- Set small (e.g. 16) for fast simulation, 512 for real RSA-1024.
+  -- KEY_WIDTH = 2 * PRIME_WIDTH is the operand width of the RSA core.
+  -- =====================================================================
+  constant PRIME_WIDTH : positive := 16;
 
   subtype mod_word_t  is unsigned(MOD_WIDTH-1 downto 0);
   type    mod_array_t is array (natural range <>) of mod_word_t;
